@@ -5,7 +5,6 @@
 
 import { CryptoUtils, bytesToBase64, base64ToBytes } from './crypto-utils.js';
 import { BitSharesAPI } from './bitshares-api.js';
-import { EmercoinNVS } from './emercoin-nvs.js';
 
 export class WalletManager {
   constructor() {
@@ -13,7 +12,6 @@ export class WalletManager {
     this.currentWallet = null;
     this.decryptedKeys = null;
     this.api = null;
-    this.emercoinNVS = new EmercoinNVS();
 
     // Auto-lock duration (timer managed via chrome.alarms)
     this.autoLockDuration = 15 * 60 * 1000; // Default: 15 minutes
@@ -381,13 +379,16 @@ export class WalletManager {
       if (bitsharesAccountName) {
         await this.findAndAddAccountByName(bitsharesAccountName, network);
       } else {
-        await this.findAndAddAccount(keys.active.publicKey, network);
+        try {
+          await this.findAndAddAccount(keys.active.publicKey, network);
+        } catch (e) {
+          if (!String(e?.message || e).includes('No accounts found for key')) {
+            throw e;
+          }
+        }
       }
 
       // Store identity on Emercoin NVS for decentralized verification
-      const identityData = { publicKey: keys.active.publicKey, walletName: name };
-      await this.emercoinNVS.storeIdentity(name, identityData);
-
       return true;
     } catch (error) {
       throw new Error('Failed to create wallet: ' + error.message);
@@ -472,13 +473,16 @@ export class WalletManager {
         await this.findAndAddAccountByName(importData.accountName, network);
       } else {
         // For other types, try to find by public key
-        await this.findAndAddAccount(keys.active.publicKey, network);
+        try {
+          await this.findAndAddAccount(keys.active.publicKey, network);
+        } catch (e) {
+          if (!String(e?.message || e).includes('No accounts found for key')) {
+            throw e;
+          }
+        }
       }
 
       // Store identity on Emercoin NVS for decentralized verification
-      const identityData = { publicKey: keys.active.publicKey, walletName: 'Imported Wallet' };
-      await this.emercoinNVS.storeIdentity('Imported Wallet', identityData);
-
       return true;
     } catch (error) {
       console.error('Import wallet error:', error);
@@ -488,4 +492,563 @@ export class WalletManager {
     }
   }
 
-  // ... rest of the code remains the same ...
+  async saveWallet(wallet) {
+    this.currentWallet = wallet;
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ wallet }, () => resolve());
+    });
+  }
+
+  async loadWallet() {
+    if (this.currentWallet) return this.currentWallet;
+    const result = await new Promise((resolve) => {
+      chrome.storage.local.get(['wallet'], (r) => resolve(r));
+    });
+    this.currentWallet = result.wallet || null;
+    return this.currentWallet;
+  }
+
+  async _getSessionStorage() {
+    return chrome.storage.session || chrome.storage.local;
+  }
+
+  async _importSessionKey() {
+    if (!this._sessionEncryptionKey) {
+      this._sessionEncryptionKey = crypto.getRandomValues(new Uint8Array(32));
+    }
+    return await crypto.subtle.importKey(
+      'raw',
+      this._sessionEncryptionKey,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async _encryptForSession(plaintext) {
+    const key = await this._importSessionKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(String(plaintext));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    return bytesToBase64(combined);
+  }
+
+  async _decryptFromSession(encryptedBase64) {
+    const combined = base64ToBytes(encryptedBase64);
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const key = await this._importSessionKey();
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(decrypted);
+  }
+
+  async storeSessionPassword(password) {
+    const storage = await this._getSessionStorage();
+    const encryptedSessionData = await this._encryptForSession(password);
+
+    const payload = {
+      encryptedSessionData,
+      unlockTimestamp: Date.now(),
+      autoLockDuration: this.autoLockDuration
+    };
+
+    if (this.autoLockDuration <= 0) {
+      payload.persistedSessionKey = bytesToBase64(this._sessionEncryptionKey);
+    }
+
+    return new Promise((resolve) => {
+      storage.set(payload, () => resolve());
+    });
+  }
+
+  async clearSessionPassword() {
+    const storage = await this._getSessionStorage();
+    return new Promise((resolve) => {
+      storage.remove(['encryptedSessionData', 'unlockTimestamp', 'persistedSessionKey', 'autoLockDuration'], () => resolve());
+    });
+  }
+
+  async _getWalletPasswordFromSession() {
+    const storage = await this._getSessionStorage();
+    const result = await new Promise((resolve) => {
+      storage.get(['encryptedSessionData'], (r) => resolve(r));
+    });
+    if (!result.encryptedSessionData) {
+      throw new Error('Wallet is locked');
+    }
+    return await this._decryptFromSession(result.encryptedSessionData);
+  }
+
+  async _readDecryptedWalletData(password) {
+    const wallet = await this.loadWallet();
+    if (!wallet) {
+      throw new Error('No wallet found');
+    }
+    const encryptionKey = await CryptoUtils.deriveKey(password, wallet.salt);
+    return await CryptoUtils.decrypt(wallet.encrypted, encryptionKey);
+  }
+
+  async _persistWalletData(updatedData) {
+    const wallet = await this.loadWallet();
+    if (!wallet) throw new Error('No wallet found');
+    const password = await this._getWalletPasswordFromSession();
+    const encryptionKey = await CryptoUtils.deriveKey(password, wallet.salt);
+    const encrypted = await CryptoUtils.encrypt(updatedData, encryptionKey);
+    const nextWallet = { ...wallet, encrypted };
+    await this.saveWallet(nextWallet);
+    this._walletData = updatedData;
+  }
+
+  async unlock(password) {
+    const wallet = await this.loadWallet();
+    if (!wallet) {
+      throw new Error('No wallet found');
+    }
+
+    // Lockout check
+    if (this._unlockLockoutUntil && Date.now() < this._unlockLockoutUntil) {
+      return false;
+    }
+
+    try {
+      const data = await this._readDecryptedWalletData(password);
+      this._walletData = data;
+      this.decryptedKeys = data.keys || null;
+      this.isUnlockedState = !!this.decryptedKeys;
+
+      await this.storeSessionPassword(password);
+      this.resetAutoLockTimer();
+
+      this._failedUnlockAttempts = 0;
+      this._unlockLockoutUntil = 0;
+      return true;
+    } catch (e) {
+      this._failedUnlockAttempts++;
+      if (this._failedUnlockAttempts >= 10) {
+        this._unlockLockoutUntil = Date.now() + 60_000;
+      }
+      return false;
+    }
+  }
+
+  async lock() {
+    this.isUnlockedState = false;
+    this.decryptedKeys = null;
+    this._walletData = null;
+    this._sessionEncryptionKey = null;
+    await this.clearSessionPassword();
+    try {
+      chrome.runtime.sendMessage({ type: 'WALLET_LOCKED' });
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  async getBrainkey() {
+    await this.ensureUnlocked();
+    return this._walletData?.brainkey || null;
+  }
+
+  async resetWallet() {
+    await this.lock();
+    this.currentWallet = null;
+    return new Promise((resolve) => {
+      chrome.storage.local.remove(['wallet', 'activeAccountId', 'connectedSites'], () => resolve());
+    });
+  }
+
+  async _ensureWalletDataLoaded() {
+    if (this._walletData) return;
+    const password = await this._getWalletPasswordFromSession();
+    this._walletData = await this._readDecryptedWalletData(password);
+  }
+
+  async getAllAccounts(network = null) {
+    await this.ensureUnlocked();
+    await this._ensureWalletDataLoaded();
+    const accounts = Array.isArray(this._walletData.accounts) ? this._walletData.accounts : [];
+    if (!network) return accounts;
+    return accounts.filter(a => a.network === network);
+  }
+
+  async getCurrentAccount() {
+    await this.ensureUnlocked();
+    const { activeAccountId } = await new Promise((resolve) => {
+      chrome.storage.local.get(['activeAccountId'], (r) => resolve(r));
+    });
+    const accounts = await this.getAllAccounts();
+    if (!accounts.length) return null;
+    if (activeAccountId) {
+      const found = accounts.find(a => a.id === activeAccountId);
+      if (found) return found;
+    }
+    return accounts[0];
+  }
+
+  async setActiveAccount(accountId) {
+    await this.ensureUnlocked();
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ activeAccountId: accountId }, () => {
+        try {
+          chrome.runtime.sendMessage({ type: 'ACCOUNT_CHANGED', data: { accountId } });
+        } catch (_) {
+          // ignore
+        }
+        resolve();
+      });
+    });
+  }
+
+  async isWatchOnlyAccount(accountId) {
+    const accounts = await this.getAllAccounts();
+    const acc = accounts.find(a => a.id === accountId);
+    return !!acc?.watchOnly;
+  }
+
+  async addWatchOnlyAccount(accountName, network = 'mainnet') {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    await this._ensureWalletDataLoaded();
+
+    const chainAccount = await this.api.getAccount(accountName);
+    if (!chainAccount) {
+      throw new Error('Account not found on BitShares');
+    }
+
+    const existing = (this._walletData.accounts || []).find(a => a.id === chainAccount.id);
+    if (existing) {
+      return true;
+    }
+
+    const nextAccounts = [...(this._walletData.accounts || []), {
+      id: chainAccount.id,
+      name: chainAccount.name,
+      network,
+      watchOnly: true
+    }];
+    await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
+
+    const { activeAccountId } = await new Promise((resolve) => {
+      chrome.storage.local.get(['activeAccountId'], (r) => resolve(r));
+    });
+    if (!activeAccountId) {
+      await this.setActiveAccount(chainAccount.id);
+    }
+    return true;
+  }
+
+  async addAccountByCredentials(accountName, bitsharesPassword, walletPassword, skipVerify = false, keyPrefix = 'BTS', network = 'mainnet') {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    await this._ensureWalletDataLoaded();
+
+    // Verify walletPassword matches the encrypted wallet (user re-auth)
+    try {
+      await this._readDecryptedWalletData(walletPassword);
+    } catch (e) {
+      throw new Error('Invalid wallet password');
+    }
+
+    const keys = await CryptoUtils.generateKeysFromPassword(accountName, bitsharesPassword, keyPrefix);
+    const chainAccount = await this.api.getAccount(accountName);
+    if (!chainAccount) {
+      throw new Error('Account not found on BitShares');
+    }
+
+    if (!skipVerify) {
+      const generatedPubKeys = [keys.active.publicKey, keys.owner.publicKey, keys.memo.publicKey];
+      const onchainKeys = [
+        ...(chainAccount.active?.key_auths?.map(k => k[0]) || []),
+        ...(chainAccount.owner?.key_auths?.map(k => k[0]) || []),
+        chainAccount.options?.memo_key
+      ].filter(Boolean);
+      const hasMatch = generatedPubKeys.some(k => onchainKeys.includes(k));
+      if (!hasMatch) {
+        throw new Error('Password does not match on-chain keys');
+      }
+    }
+
+    const nextAccounts = [...(this._walletData.accounts || []).filter(a => a.id !== chainAccount.id), {
+      id: chainAccount.id,
+      name: chainAccount.name,
+      network,
+      watchOnly: false,
+      keys
+    }];
+    await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
+    await this.setActiveAccount(chainAccount.id);
+    return true;
+  }
+
+  async removeAccount(accountId) {
+    await this.ensureUnlocked();
+    await this._ensureWalletDataLoaded();
+    const nextAccounts = (this._walletData.accounts || []).filter(a => a.id !== accountId);
+    await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
+    const { activeAccountId } = await new Promise((resolve) => {
+      chrome.storage.local.get(['activeAccountId'], (r) => resolve(r));
+    });
+    if (activeAccountId === accountId) {
+      const next = nextAccounts[0]?.id || null;
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ activeAccountId: next }, () => resolve());
+      });
+    }
+    return true;
+  }
+
+  async updateAccountNetwork(accountId, newNetwork) {
+    await this.ensureUnlocked();
+    await this._ensureWalletDataLoaded();
+    const nextAccounts = (this._walletData.accounts || []).map(a => a.id === accountId ? { ...a, network: newNetwork } : a);
+    await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
+    return true;
+  }
+
+  async findAndAddAccountByName(accountName, network = 'mainnet') {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    await this._ensureWalletDataLoaded();
+
+    const chainAccount = await this.api.getAccount(accountName);
+    if (!chainAccount) {
+      throw new Error('Account not found on BitShares');
+    }
+
+    const keys = this.decryptedKeys;
+    if (!keys) {
+      throw new Error('Wallet is locked');
+    }
+
+    const nextAccounts = [...(this._walletData.accounts || []).filter(a => a.id !== chainAccount.id), {
+      id: chainAccount.id,
+      name: chainAccount.name,
+      network,
+      watchOnly: false,
+      keys
+    }];
+    await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
+    await this.setActiveAccount(chainAccount.id);
+    return true;
+  }
+
+  async findAndAddAccount(publicKey, network = 'mainnet') {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    const accounts = await this.api.getAccountsByKey(publicKey);
+    if (!accounts || accounts.length === 0) {
+      return false;
+    }
+    const first = accounts[0];
+    // get_key_references typically returns account IDs
+    if (typeof first === 'string' && first.startsWith('1.2.')) {
+      const acct = await this.api.getAccount(first);
+      if (!acct) throw new Error('Account not found on BitShares');
+      return await this.findAndAddAccountByName(acct.name, network);
+    }
+    return false;
+  }
+
+  async registerAccountViaFaucet(accountName, keys, faucetUrl) {
+    const payload = {
+      account: {
+        name: accountName,
+        owner_key: keys.owner.publicKey,
+        active_key: keys.active.publicKey,
+        memo_key: keys.memo.publicKey
+      }
+    };
+
+    const res = await fetch(faucetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Faucet error (${res.status}): ${text}`);
+    }
+
+    let json;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { raw: text };
+    }
+
+    if (json && (json.error || json.errors)) {
+      throw new Error(`Faucet error: ${JSON.stringify(json.error || json.errors)}`);
+    }
+
+    return json;
+  }
+
+  async createAccountOnChain(accountName, keys, feeAccountNameOrId) {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    await this._ensureWalletDataLoaded();
+
+    const feeAccount = await this.api.getAccount(feeAccountNameOrId);
+    if (!feeAccount) {
+      throw new Error('Fee account not found on BitShares');
+    }
+
+    const accounts = await this.getAllAccounts();
+    const signer = accounts.find(a => a.id === feeAccount.id) || null;
+    const signerKey = signer?.keys?.active?.privateKey || this.decryptedKeys?.active?.privateKey;
+    if (!signerKey) {
+      throw new Error('Fee account private key not available in wallet');
+    }
+
+    const opData = {
+      fee: { amount: 0, asset_id: '1.3.0' },
+      registrar: feeAccount.id,
+      referrer: feeAccount.id,
+      referrer_percent: 0,
+      name: accountName,
+      owner: {
+        weight_threshold: 1,
+        account_auths: [],
+        key_auths: [[keys.owner.publicKey, 1]],
+        address_auths: []
+      },
+      active: {
+        weight_threshold: 1,
+        account_auths: [],
+        key_auths: [[keys.active.publicKey, 1]],
+        address_auths: []
+      },
+      options: {
+        memo_key: keys.memo.publicKey,
+        voting_account: '1.2.5',
+        num_witness: 0,
+        num_committee: 0,
+        votes: [],
+        extensions: []
+      },
+      extensions: []
+    };
+
+    return await this.api.broadcastTransaction('account_create', opData, signerKey);
+  }
+
+  async _getSigningKeysForAccount(accountId) {
+    await this.ensureUnlocked();
+    const accounts = await this.getAllAccounts();
+    const acc = accounts.find(a => a.id === accountId) || null;
+    if (acc?.watchOnly) throw new Error('Watch-only account cannot sign');
+    return acc?.keys || this.decryptedKeys;
+  }
+
+  async broadcastOperation(operationType, operationData) {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    const account = await this.getCurrentAccount();
+    if (!account) throw new Error('No active account');
+    const keys = await this._getSigningKeysForAccount(account.id);
+    if (!keys?.active?.privateKey) throw new Error('Active private key not available');
+    return await this.api.broadcastTransaction(operationType, operationData, keys.active.privateKey);
+  }
+
+  async sendTransfer(to, amount, assetId = '1.3.0', memo = null) {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+
+    const fromAccount = await this.getCurrentAccount();
+    if (!fromAccount) throw new Error('No active account');
+
+    const toAccount = await this.api.getAccount(to);
+    if (!toAccount) throw new Error('Recipient not found');
+
+    const asset = await this.api.getAsset(assetId);
+    if (!asset) throw new Error('Asset not found');
+
+    const precision = Math.pow(10, asset.precision);
+    const amt = Math.floor(Number(amount) * precision);
+    if (!Number.isFinite(amt) || amt <= 0) throw new Error('Invalid amount');
+
+    const keys = await this._getSigningKeysForAccount(fromAccount.id);
+    if (!keys?.active?.privateKey) throw new Error('Active private key not available');
+
+    let memoObject = undefined;
+    if (memo && String(memo).trim().length > 0) {
+      const toMemoKey = toAccount.options?.memo_key;
+      if (toMemoKey && keys.memo?.privateKey) {
+        memoObject = await CryptoUtils.encryptMemo(String(memo), keys.memo.privateKey, toMemoKey);
+      }
+    }
+
+    const opData = {
+      fee: { amount: 0, asset_id: '1.3.0' },
+      from: fromAccount.id,
+      to: toAccount.id,
+      amount: { amount: amt, asset_id: asset.id || assetId },
+      memo: memoObject,
+      extensions: []
+    };
+
+    return await this.api.broadcastTransaction('transfer', opData, keys.active.privateKey);
+  }
+
+  async signTransaction(transaction) {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+    const account = await this.getCurrentAccount();
+    if (!account) throw new Error('No active account');
+    const keys = await this._getSigningKeysForAccount(account.id);
+    if (!keys?.active?.privateKey) throw new Error('Active private key not available');
+    return await this.api.signTransaction(transaction, keys.active.privateKey);
+  }
+
+  async getConnectedSites(accountId = null, network = null) {
+    const { connectedSites } = await new Promise((resolve) => {
+      chrome.storage.local.get(['connectedSites'], (r) => resolve(r));
+    });
+    const sites = Array.isArray(connectedSites) ? connectedSites : [];
+    return sites.filter(s => {
+      if (network && s.network !== network) return false;
+      if (accountId && s.accountId !== accountId) return false;
+      return true;
+    });
+  }
+
+  async addConnectedSite(origin, accountId, accountName, network = 'mainnet') {
+    const sites = await this.getConnectedSites(null, null);
+    const next = [
+      ...sites.filter(s => !(s.origin === origin && s.accountId === accountId && s.network === network)),
+      { origin, accountId, accountName, network, connectedAt: Date.now() }
+    ];
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ connectedSites: next }, () => resolve(true));
+    });
+  }
+
+  async removeConnectedSite(origin, accountId = null, network = null) {
+    const sites = await this.getConnectedSites(null, null);
+    const next = sites.filter(s => {
+      if (s.origin !== origin) return true;
+      if (network && s.network !== network) return true;
+      if (accountId && s.accountId !== accountId) return true;
+      if (!accountId) return false;
+      return false;
+    });
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ connectedSites: next }, () => resolve(true));
+    });
+  }
+
+  async isSiteConnected(origin, accountId = null, network = 'mainnet') {
+    const sites = await this.getConnectedSites(null, null);
+    return sites.some(s => {
+      if (s.origin !== origin) return false;
+      if (network && s.network !== network) return false;
+      if (accountId && s.accountId !== accountId) return false;
+      return true;
+    });
+  }
+
+}

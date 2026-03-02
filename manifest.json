@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "BitShares Wallet",
+  "name": "Privateness.network BitShares Wallet",
   "version": "0.6.1",
-  "description": "A secure BitShares blockchain wallet extension for Chrome - Sign transactions, manage keys, and interact with dApps",
-  "author": "BitShares Community",
+  "description": "A secure Privateness.network BitShares wallet extension for Chrome - Sign transactions, manage keys, and interact with dApps",
+  "author": "Privateness.network / BitShares Community",
   "homepage_url": "https://bitshares.org",
   
   "icons": {
@@ -21,7 +21,7 @@
       "48": "src/assets/icons/icon48.png",
       "128": "src/assets/icons/icon128.png"
     },
-    "default_title": "BitShares Wallet"
+    "default_title": "Privateness.network BitShares Wallet"
   },
   
   "background": {

@@ -18,8 +18,7 @@ export class SkywireNetwork {
 
   async routeTrafficThroughSkywire(nodeUrl) {
     if (!this.isInitialized) await this.initialize();
-    // Placeholder for routing blockchain traffic through Skywire
-    console.log('Routing traffic to', nodeUrl, 'via Skywire');
-    return { success: true, routedUrl: `skywire://${nodeUrl}` };
+    console.log('Skywire routing not configured; using direct node URL for', nodeUrl);
+    return { success: false, routedUrl: null };
   }
 }

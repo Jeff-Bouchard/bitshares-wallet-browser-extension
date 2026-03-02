@@ -299,7 +299,7 @@ export class BitSharesAPI {
    */
   async getAccountsByKey(publicKey) {
     // Validate public key format before making API call
-    if (!publicKey || typeof publicKey !== 'string' || !publicKey.startsWith('BTS') || publicKey.length < 50) {
+    if (!publicKey || typeof publicKey !== 'string' || !(publicKey.startsWith('BTS') || publicKey.startsWith('TEST')) || publicKey.length < 50) {
       console.warn('Invalid public key format:', publicKey);
       return [];
     }

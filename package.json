@@ -7,7 +7,9 @@
     "build:firefox": "node scripts/build.js firefox",
     "build:all": "node scripts/build.js all",
     "clean": "node scripts/clean.js",
-    "test": "jest"
+    "test": "jest",
+    "test:e2e": "node scripts/e2e-branding.js",
+    "test:e2e:runtime": "node scripts/e2e-runtime-branding.js"
   },
   "keywords": [
     "bitshares",
@@ -29,7 +31,8 @@
     "@jest/globals": "^29.7.0",
     "@babel/core": "^7.24.0",
     "@babel/preset-env": "^7.24.0",
-    "babel-jest": "^29.7.0"
+    "babel-jest": "^29.7.0",
+    "playwright": "^1.55.0"
   },
   "jest": {
     "testEnvironment": "node",
