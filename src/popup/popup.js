@@ -1110,10 +1110,48 @@ async function updateAssetsList(balances) {
   const assetsList = document.getElementById('assets-list');
   assetsList.innerHTML = '';
 
+  const pinnedSymbols = ['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC'];
+  const pinnedAssets = (await Promise.all(
+    pinnedSymbols.map(async (sym) => {
+      try {
+        return await btsAPI.getAsset(sym);
+      } catch (_) {
+        return null;
+      }
+    })
+  )).filter(Boolean);
+
+  for (const asset of pinnedAssets) {
+    const bal = balances.find(b => b.asset_id === asset.id) || { amount: 0 };
+    const precision = Math.pow(10, asset.precision);
+    const amount = (parseInt(bal.amount) / precision).toFixed(asset.precision);
+
+    const assetItem = document.createElement('div');
+    assetItem.className = 'asset-item';
+    assetItem.style.cursor = 'pointer';
+    assetItem.innerHTML = `
+      <div class="asset-icon">${escapeHtml(asset.symbol.substring(0, 3))}</div>
+      <div class="asset-info">
+        <div class="asset-name">${escapeHtml(asset.symbol)}</div>
+        <div class="asset-symbol">${escapeHtml(asset.id)}</div>
+      </div>
+      <div class="asset-balance">
+        <div class="asset-amount">${escapeHtml(amount)}</div>
+      </div>
+    `;
+
+    assetItem.addEventListener('click', () => {
+      handleShowSend(asset.id);
+    });
+
+    assetsList.appendChild(assetItem);
+  }
+
   for (const balance of balances) {
     if (parseInt(balance.amount) === 0) continue;
 
     const asset = await btsAPI.getAsset(balance.asset_id);
+    if (pinnedAssets.some(a => a.id === asset.id)) continue;
     const precision = Math.pow(10, asset.precision);
     const amount = (parseInt(balance.amount) / precision).toFixed(asset.precision);
 
@@ -3001,6 +3039,17 @@ async function loadSendAssets() {
         const amount = (parseInt(balance.amount) / precision).toFixed(asset.precision);
         assetSelect.innerHTML += `<option value="${asset.id}" data-precision="${asset.precision}" data-amount="${balance.amount}">${asset.symbol} (${amount})</option>`;
       }
+    }
+
+    const pinnedSymbols = ['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC'];
+    for (const sym of pinnedSymbols) {
+      const asset = await btsAPI.getAsset(sym);
+      if (!asset) continue;
+      if ([...assetSelect.options].some(o => o.value === asset.id)) continue;
+      const bal = balances.find(b => b.asset_id === asset.id) || { amount: 0 };
+      const precision = Math.pow(10, asset.precision);
+      const amount = (parseInt(bal.amount) / precision).toFixed(asset.precision);
+      assetSelect.innerHTML += `<option value="${asset.id}" data-precision="${asset.precision}" data-amount="${bal.amount}">${asset.symbol} (${amount})</option>`;
     }
 
     // Update available balance for default selection (BTS)
