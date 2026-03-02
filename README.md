@@ -7,6 +7,7 @@ A secure browser extension for the BitShares blockchain - similar to MetaMask bu
 ## Features
 
 ### Wallet Management
+
 - Create new wallet with password-protected brainkey
 - Import existing wallets via:
   - Account name + password (keys verified against chain before import)
@@ -19,6 +20,7 @@ A secure browser extension for the BitShares blockchain - similar to MetaMask bu
 - Multi-account support with watch-only accounts
 
 ### Asset Management
+
 - View BTS and all BitShares assets, including dotted gateway symbols like `XBTSX.NESS`, `XBTSX.NCH`, and `XBTSX.EMC`
 - Real-time balance updates
 - USD value display with market prices (primary source: `XBTSX.USDT`, with sane fallbacks)
@@ -26,6 +28,7 @@ A secure browser extension for the BitShares blockchain - similar to MetaMask bu
 - QR code generation for receiving
 
 ### Transactions
+
 - Send core and gateway assets by object ID (`1.3.x`) or symbol (`BTS`, `TEST`, `XBTSX.*`)
 - Recipient account validation
 - Optional encrypted memos
@@ -38,25 +41,25 @@ The wallet supports signing all 75 BitShares blockchain operation types, not jus
 
 #### Supported Operation Categories
 
-| Category | Operations |
-|----------|-----------|
-| Account | account_create, account_update, account_upgrade, account_whitelist, account_transfer |
-| Assets | asset_create, asset_update, asset_update_bitasset, asset_update_feed_producers, asset_issue, asset_reserve, asset_fund_fee_pool, asset_settle, asset_global_settle, asset_publish_feed, asset_claim_fees, asset_update_issuer, asset_claim_pool |
-| Trading (DEX) | limit_order_create, limit_order_cancel, call_order_update, fill_order, bid_collateral, execute_bid |
-| Transfers | transfer, transfer_to_blind, transfer_from_blind, blind_transfer, override_transfer, balance_claim, asset_settle_cancel |
-| Proposals | proposal_create, proposal_update, proposal_delete |
-| Witnesses | witness_create, witness_update |
-| Committee | committee_member_create, committee_member_update, committee_member_update_global_parameters |
-| Workers | worker_create |
-| Vesting | vesting_balance_create, vesting_balance_withdraw |
-| Withdraw Permissions | withdraw_permission_create, withdraw_permission_update, withdraw_permission_claim, withdraw_permission_delete |
-| Custom / Misc | custom, assert, fba_distribute |
-| Liquidity Pools | liquidity_pool_create, liquidity_pool_delete, liquidity_pool_deposit, liquidity_pool_withdraw, liquidity_pool_exchange |
-| Tickets | ticket_create, ticket_update |
-| HTLC | htlc_create, htlc_redeem, htlc_redeemed, htlc_extend, htlc_refund |
-| Custom Authority | custom_authority_create, custom_authority_update, custom_authority_delete |
-| Credit | credit_offer_create, credit_offer_delete, credit_offer_update, credit_offer_accept, credit_deal_repay, credit_deal_expired |
-| Samet Fund | samet_fund_create, samet_fund_delete, samet_fund_update, samet_fund_borrow, samet_fund_repay |
+|Category|Operations|
+|---|---|
+|Account|account_create, account_update, account_upgrade, account_whitelist, account_transfer|
+|Assets|asset_create, asset_update, asset_update_bitasset, asset_update_feed_producers, asset_issue, asset_reserve, asset_fund_fee_pool, asset_settle, asset_global_settle, asset_publish_feed, asset_claim_fees, asset_update_issuer, asset_claim_pool|
+|Trading (DEX)|limit_order_create, limit_order_cancel, call_order_update, fill_order, bid_collateral, execute_bid|
+|Transfers|transfer, transfer_to_blind, transfer_from_blind, blind_transfer, override_transfer, balance_claim, asset_settle_cancel|
+|Proposals|proposal_create, proposal_update, proposal_delete|
+|Witnesses|witness_create, witness_update|
+|Committee|committee_member_create, committee_member_update, committee_member_update_global_parameters|
+|Workers|worker_create|
+|Vesting|vesting_balance_create, vesting_balance_withdraw|
+|Withdraw Permissions|withdraw_permission_create, withdraw_permission_update, withdraw_permission_claim, withdraw_permission_delete|
+|Custom / Misc|custom, assert, fba_distribute|
+|Liquidity Pools|liquidity_pool_create, liquidity_pool_delete, liquidity_pool_deposit, liquidity_pool_withdraw, liquidity_pool_exchange|
+|Tickets|ticket_create, ticket_update|
+|HTLC|htlc_create, htlc_redeem, htlc_redeemed, htlc_extend, htlc_refund|
+|Custom Authority|custom_authority_create, custom_authority_update, custom_authority_delete|
+|Credit|credit_offer_create, credit_offer_delete, credit_offer_update, credit_offer_accept, credit_deal_repay, credit_deal_expired|
+|Samet Fund|samet_fund_create, samet_fund_delete, samet_fund_update, samet_fund_borrow, samet_fund_repay|
 
 #### Human-Readable Operation Display
 
@@ -70,6 +73,7 @@ The signing confirmation dialog renders each operation in a readable format with
 Unknown or future operations gracefully fall back to a formatted JSON display.
 
 ### dApp Integration
+
 - Connect to BitShares dApps
 - Sign transactions for connected sites
 - Manage site permissions
@@ -77,6 +81,7 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Event-based communication
 
 ### Network Support
+
 - **BitShares Mainnet** and **BitShares Testnet** selectable at any point
   - Network selector on the welcome screen (before wallet creation or import)
   - Network selector on the dashboard
@@ -85,6 +90,7 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Service worker stays in sync with the popup network — `ensureConnected()` reconnects to the stored network before every dApp request
 
 ### Settings
+
 - Auto-lock timer configuration
 - Network selection (Mainnet/Testnet)
 - Custom node configuration per network
@@ -105,29 +111,31 @@ npm test
 ### Test Coverage
 
 #### `tests/crypto-utils.test.js`
+
 Tests for `src/lib/crypto-utils.js`:
 
-| Function | Tests |
-|----------|-------|
-| `generateBrainkey()` | Returns string, 16 words, uppercase, non-deterministic |
-| `normalizeBrainkey()` | Trims whitespace, normalizes case, handles edge cases |
-| `generateKeysFromBrainkey()` | Returns active/owner/memo keys |
-| `generateKeysFromPassword()` | Returns keys from account + password |
-| `deriveKey()` | PBKDF2 derivation produces correct-length key |
-| `encrypt()` + `decrypt()` | Round-trip encryption/decryption |
-| `generateSalt()` | Produces non-empty, unique salts |
-| Edge cases | Null/empty inputs, malformed data |
+|Function|Tests|
+|---|---|
+|`generateBrainkey()`|Returns string, 16 words, uppercase, non-deterministic|
+|`normalizeBrainkey()`|Trims whitespace, normalizes case, handles edge cases|
+|`generateKeysFromBrainkey()`|Returns active/owner/memo keys|
+|`generateKeysFromPassword()`|Returns keys from account + password|
+|`deriveKey()`|PBKDF2 derivation produces correct-length key|
+|`encrypt()` + `decrypt()`|Round-trip encryption/decryption|
+|`generateSalt()`|Produces non-empty, unique salts|
+|Edge cases|Null/empty inputs, malformed data|
 
 #### `tests/wallet-manager.test.js`
+
 Tests for `src/lib/wallet-manager.js`:
 
-| Function | Tests |
-|----------|-------|
-| `hasWallet()` | False when empty, true after save, false after clear |
-| `createWallet()` | Resolves true, stores wallet, correct structure, unlocked on creation, brainkey encrypted |
-| `unlock()` | True with correct password, false with wrong, state changes, decryptedKeys populated |
-| `lock()` | Clears state, clears keys, idempotent, re-unlock works, sends WALLET_LOCKED message |
-| `isUnlocked()` | Reflects locked/unlocked state accurately |
+|Function|Tests|
+|---|---|
+|`hasWallet()`|False when empty, true after save, false after clear|
+|`createWallet()`|Resolves true, stores wallet, correct structure, unlocked on creation, brainkey encrypted|
+|`unlock()`|True with correct password, false with wrong, state changes, decryptedKeys populated|
+|`lock()`|Clears state, clears keys, idempotent, re-unlock works, sends WALLET_LOCKED message|
+|`isUnlocked()`|Reflects locked/unlocked state accurately|
 
 #### Test Infrastructure
 
@@ -138,11 +146,11 @@ Tests for `src/lib/wallet-manager.js`:
 
 ## Browser Support
 
-| Browser | Status | Manifest |
-|---------|--------|----------|
-| Chrome  | Supported | MV3 |
-| Brave   | Supported | MV3 (same as Chrome) |
-| Firefox | Supported | MV2 |
+|Browser|Status|Manifest|
+|---|---|---|
+|Chrome|Supported|MV3|
+|Brave|Supported|MV3 (same as Chrome)|
+|Firefox|Supported|MV2|
 
 ## Installation
 
@@ -186,7 +194,7 @@ Output goes to `dist/` (Chrome/Brave) and `dist-firefox/` (Firefox).
 
 ## Project Structure
 
-```
+```text
 bitshares-wallet-browser-extension/
 ├── manifest.json              # Chrome/Brave manifest (MV3)
 ├── manifest.firefox.json      # Firefox manifest (MV2)
@@ -356,6 +364,7 @@ const orderResult = await window.bitsharesWallet.signTransaction({
 ```
 
 > **Notes**
+>
 > - `fee` can be `{ amount: 0, asset_id: '1.3.0' }` — the wallet fills the real fee.
 > - Account fields (`from`, `to`, `seller`, …) accept either object IDs (`1.2.xxxxx`) or account names (`my-account`).
 > - Asset fields accept either object IDs (`1.3.0`) or symbols (`BTS`, `TEST`, `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.EMC`, ...).
@@ -461,6 +470,7 @@ await window.beet.forgetIdentity();
 ## BitShares Network
 
 ### Mainnet Nodes
+
 - `wss://node.xbts.io/ws`
 - `wss://cloud.xbts.io/ws`
 - `wss://public.xbts.io/ws`
@@ -469,14 +479,16 @@ await window.beet.forgetIdentity();
 - `wss://api.bitshares.dev/ws`
 
 ### Testnet Nodes
+
 - `wss://testnet.xbts.io/ws`
 - `wss://testnet.dex.trading/`
 
 ### Chain IDs
-| Network | Chain ID |
-|---------|----------|
-| Mainnet | `4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8` |
-| Testnet | `39f5e2ede1f8bc1a3a54a7914414e3779e33193f1f5693510e73cb7a87617447` |
+
+|Network|Chain ID|
+|---|---|
+|Mainnet|`4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8`|
+|Testnet|`39f5e2ede1f8bc1a3a54a7914414e3779e33193f1f5693510e73cb7a87617447`|
 
 ## Building for Distribution
 
