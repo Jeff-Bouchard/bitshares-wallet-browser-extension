@@ -750,7 +750,7 @@ export class BitSharesAPI {
    * Return true when a string already looks like a BitShares object ID (X.Y.Z).
    */
   _isObjectId(str) {
-    return typeof str === 'string' && str.includes('.');
+    return typeof str === 'string' && /^\d+\.\d+\.\d+$/.test(str);
   }
 
   /**
@@ -785,7 +785,7 @@ export class BitSharesAPI {
         const v = assetObj.asset_id;
         if (typeof v === 'string' && !this._isObjectId(v)) {
           try {
-            const [asset] = await this.call(this.apiIds.database, 'get_assets', [[v]]);
+            const asset = await this.getAsset(v);
             if (asset?.id) assetObj.asset_id = asset.id;
           } catch (_) { /* leave as-is */ }
         }

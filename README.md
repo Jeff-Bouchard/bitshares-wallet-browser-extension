@@ -19,14 +19,14 @@ A secure browser extension for the BitShares blockchain - similar to MetaMask bu
 - Multi-account support with watch-only accounts
 
 ### Asset Management
-- View BTS and all BitShares assets
+- View BTS and all BitShares assets, including dotted gateway symbols like `XBTSX.NESS`, `XBTSX.NCH`, and `XBTSX.EMC`
 - Real-time balance updates
-- USD value display with market prices
+- USD value display with market prices (primary source: `XBTSX.USDT`, with sane fallbacks)
 - Full transaction history with filtering
 - QR code generation for receiving
 
 ### Transactions
-- Send BTS and other assets
+- Send core and gateway assets by object ID (`1.3.x`) or symbol (`BTS`, `TEST`, `XBTSX.*`)
 - Recipient account validation
 - Optional encrypted memos
 - Transaction fee calculation
@@ -358,18 +358,43 @@ const orderResult = await window.bitsharesWallet.signTransaction({
 > **Notes**
 > - `fee` can be `{ amount: 0, asset_id: '1.3.0' }` — the wallet fills the real fee.
 > - Account fields (`from`, `to`, `seller`, …) accept either object IDs (`1.2.xxxxx`) or account names (`my-account`).
-> - Asset fields accept either object IDs (`1.3.0`) or symbols (`BTS`).
+> - Asset fields accept either object IDs (`1.3.0`) or symbols (`BTS`, `TEST`, `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.EMC`, ...).
 > - Multi-operation transactions are supported — each operation is shown as a separate labeled section in the confirmation dialog.
+
+#### Asset Resolution Rules (Read Once, Save Future You)
+
+When a transaction is approved, the wallet normalizes asset/account references before signing:
+
+1. **Already numeric IDs** (`1.2.x`, `1.3.x`) are used as-is.
+2. **Core symbols** (`BTS` on mainnet, `TEST` on testnet) resolve to core asset `1.3.0`.
+3. **Gateway symbols** (including dotted symbols such as `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.EMC`) resolve to their canonical `1.3.x` object IDs.
+4. The signed transaction always contains canonical object IDs, so the node never receives ambiguous symbols.
 
 ### Transfers (Convenience Method)
 
 ```javascript
 const result = await window.bitsharesWallet.transfer({
   to: 'recipient-name',
-  amount: { amount: 100000, asset_id: '1.3.0' },
-  memo: 'Thanks!'
+  amount: 12.5,            // display units (not base units)
+  asset: 'XBTSX.NESS',     // optional; can be symbol or 1.3.x ID
+  memo: 'Thanks from NESS!'
 });
 ```
+
+```javascript
+// Same call, explicit object ID instead of symbol
+await window.bitsharesWallet.transfer({
+  to: 'recipient-name',
+  amount: 12.5,
+  asset: '1.3.12345'
+});
+```
+
+**Transfer helper semantics:**
+
+- `amount` is a human-readable decimal amount.
+- `asset` defaults to the core asset (`BTS`/`TEST`) if omitted.
+- For strict base-unit control, use `signTransaction()` and provide `amount.asset_id` + integer `amount.amount` directly.
 
 ### Event Listeners
 

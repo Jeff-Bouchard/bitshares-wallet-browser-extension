@@ -1356,6 +1356,10 @@ export class WalletManager {
 
       // Get asset info
       const asset = await this.api.getAsset(assetId);
+      if (!asset || !asset.id) {
+        throw new Error(`Asset not found: ${assetId}`);
+      }
+      const resolvedAssetId = asset.id;
       const precision = Math.pow(10, asset.precision);
       const amountInt = Math.round(parseFloat(amount) * precision);
 
@@ -1395,7 +1399,7 @@ export class WalletManager {
         fee: { amount: 0, asset_id: '1.3.0' },
         from: fromAccount.id,
         to: toAccount.id,
-        amount: { amount: amountInt, asset_id: assetId }
+        amount: { amount: amountInt, asset_id: resolvedAssetId }
       };
 
       // Only include memo field if we have a memo
