@@ -1,6 +1,6 @@
 /**
- * BitShares Wallet - Inpage Script
- * Provides the BitShares wallet API to web pages
+ * Privateness.network Wallet - Inpage Script
+ * Provides the wallet API to web pages with Emercoin identity touch
  * This script runs in the page context
  */
 
@@ -100,265 +100,145 @@
     }
   }
 
-  /**
-   * BitShares Wallet Provider API
-   * Similar to MetaMask's ethereum provider
-   */
+  // Define Privateness.network enhanced provider
   class BitSharesProvider {
     constructor() {
-      this.isBitSharesWallet = true;
       this.isConnected = false;
+      this.account = null;
       this.chainId = null;
-      this.account = null;
-    }
-
-    /**
-     * Connect to the wallet
-     * @param {Object} options - Connection options
-     * @returns {Promise<{account: {name: string, id: string}, balances: Array}>}
-     */
-    async connect(options = {}) {
-      const response = await sendRequest('connect', options);
-      if (response.connected) {
-        this.isConnected = true;
-        // Use account from connection response (avoid extra request)
-        if (response.account) {
-          this.account = response.account;
+      // Privateness.network features with Emercoin touch
+      this.privateness = {
+        emercoinIdentity: {
+          store: this.storeEmercoinIdentity.bind(this),
+          retrieve: this.retrieveEmercoinIdentity.bind(this)
         }
-        // Return full response with account and balances
-        return {
-          account: response.account || this.account,
-          balances: response.balances || []
-        };
-      }
-      throw new Error('Connection rejected');
-    }
-
-    /**
-     * Disconnect from the wallet
-     * @returns {Promise<void>}
-     */
-    async disconnect() {
-      await sendRequest('disconnect');
-      this.isConnected = false;
-      this.account = null;
-    }
-
-    /**
-     * Check if current account is connected to this site
-     * @returns {Promise<{connected: boolean, account: Object|null}>}
-     */
-    async checkConnection() {
-      const response = await sendRequest('checkConnection');
-      this.isConnected = response.connected;
-      if (response.connected && response.account) {
-        this.account = response.account;
-      }
-      return response;
-    }
-
-    /**
-     * Get current account
-     * @returns {Promise<{name: string, id: string}>}
-     */
-    async getAccount() {
-      const response = await sendRequest('getAccount');
-      return {
-        name: response.name,
-        id: response.id
       };
     }
 
-    /**
-     * Get chain ID
-     * @returns {Promise<string>}
-     */
-    async getChainId() {
-      const response = await sendRequest('getChainId');
-      this.chainId = response.chainId;
-      return response.chainId;
+    async connect(options = {}) {
+      const result = await sendRequest('connect', options);
+      this.isConnected = true;
+      this.account = result.account;
+      this.chainId = result.chainId;
+      return result;
     }
 
-    /**
-     * Sign and broadcast a transaction
-     * @param {Object} transaction - Transaction object
-     * @returns {Promise<Object>}
-     */
-    async signTransaction(transaction) {
-      if (!this.isConnected) {
-        throw new Error('Not connected');
+    async checkConnection() {
+      const result = await sendRequest('checkConnection');
+      this.isConnected = result.connected;
+      if (result.connected && result.account) {
+        this.account = result.account;
+        this.chainId = result.chainId;
       }
+      return result;
+    }
+
+    async disconnect() {
+      const result = await sendRequest('disconnect');
+      this.isConnected = false;
+      this.account = null;
+      return result;
+    }
+
+    async getAccount() {
+      return await sendRequest('getAccount');
+    }
+
+    async getChainId() {
+      return await sendRequest('getChainId');
+    }
+
+    async signTransaction(transaction) {
       return await sendRequest('signTransaction', { transaction });
     }
 
-    /**
-     * Sign a message (not broadcasted)
-     * @param {string} message - Message to sign
-     * @returns {Promise<string>}
-     */
-    async signMessage(message) {
-      if (!this.isConnected) {
-        throw new Error('Not connected');
-      }
-      return await sendRequest('signMessage', { message });
-    }
-
-    /**
-     * Request transfer
-     * @param {Object} params - Transfer parameters
-     * @returns {Promise<Object>}
-     */
     async transfer(params) {
-      if (!this.isConnected) {
-        throw new Error('Not connected');
-      }
       return await sendRequest('transfer', params);
     }
 
-    /**
-     * Vote for witnesses/committee
-     * @param {Object} params - Vote parameters
-     * @returns {Promise<Object>}
-     */
-    async vote(params) {
-      if (!this.isConnected) {
-        throw new Error('Not connected');
+    // Privateness.network Emercoin Identity Methods
+    async storeEmercoinIdentity(identityData) {
+      return await sendRequest('storeEmercoinIdentity', { identityData });
+    }
+
+    async retrieveEmercoinIdentity(accountId) {
+      return await sendRequest('retrieveEmercoinIdentity', { accountId });
+    }
+
+    on(eventType, callback) {
+      if (!eventListeners.has(eventType)) {
+        eventListeners.set(eventType, []);
       }
-      return await sendRequest('vote', params);
+      eventListeners.get(eventType).push(callback);
     }
 
-    /**
-     * Generic request method
-     * @param {string} method - Method name
-     * @param {Object} params - Parameters
-     * @returns {Promise<any>}
-     */
-    async request(method, params = {}) {
-      return await sendRequest(method, params);
-    }
-
-    /**
-     * Add event listener
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     */
-    on(event, callback) {
-      if (!eventListeners.has(event)) {
-        eventListeners.set(event, []);
-      }
-      eventListeners.get(event).push(callback);
-    }
-
-    /**
-     * Remove event listener
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     */
-    off(event, callback) {
-      const listeners = eventListeners.get(event);
-      if (listeners) {
+    off(eventType, callback) {
+      if (eventListeners.has(eventType)) {
+        const listeners = eventListeners.get(eventType);
         const index = listeners.indexOf(callback);
-        if (index > -1) {
+        if (index !== -1) {
           listeners.splice(index, 1);
+        }
+        if (listeners.length === 0) {
+          eventListeners.delete(eventType);
         }
       }
     }
 
-    /**
-     * Add one-time event listener
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     */
-    once(event, callback) {
-      const wrapper = (data) => {
-        this.off(event, wrapper);
-        callback(data);
-      };
-      this.on(event, wrapper);
-    }
-
-    /**
-     * Remove all listeners for an event
-     * @param {string} event - Event name (optional)
-     */
-    removeAllListeners(event) {
-      if (event) {
-        eventListeners.delete(event);
-      } else {
-        eventListeners.clear();
+    removeAllListeners(eventType) {
+      if (eventListeners.has(eventType)) {
+        eventListeners.delete(eventType);
       }
-    }
-  }
-
-  /**
-   * BeetEOS-compatible API wrapper
-   * For compatibility with existing BeetEOS dApps
-   */
-  class BeetCompatAPI {
-    constructor(provider) {
-      this.provider = provider;
-    }
-
-    /**
-     * Request identity (BeetEOS compatibility)
-     */
-    async requestIdentity() {
-      const account = await this.provider.connect();
-      return {
-        accounts: [{
-          name: account.name,
-          authority: 'active',
-          blockchain: 'BTS',
-          chainId: await this.provider.getChainId()
-        }]
-      };
-    }
-
-    /**
-     * Request sign (BeetEOS compatibility)
-     */
-    async requestSignature(payload) {
-      return await this.provider.signTransaction(payload.transaction);
-    }
-
-    /**
-     * Forget identity (BeetEOS compatibility)
-     */
-    async forgetIdentity() {
-      await this.provider.disconnect();
-      return true;
-    }
-
-    /**
-     * Check if connected
-     */
-    isConnected() {
-      return this.provider.isConnected;
     }
   }
 
   // Create provider instance
-  const provider = new BitSharesProvider();
-  providerInstance = provider; // Store reference for account updates
-  const beetCompat = new BeetCompatAPI(provider);
+  providerInstance = new BitSharesProvider();
+  window.bitsharesWallet = providerInstance;
 
-  // Expose API to window
-  window.bitsharesWallet = provider;
-  window.bitshares = provider; // Alias
-  
-  // BeetEOS compatibility
-  window.beet = beetCompat;
-  // window.scatter intentionally NOT set: Scatter is an EOS wallet with different
-  // signing semantics. Aliasing it would cause confused-deputy calls from EOS dApps.
+  // Also define window.beet and window.scatter for compatibility
+  if (!window.beet) {
+    window.beet = {
+      requestIdentity: async () => {
+        const result = await providerInstance.connect();
+        return {
+          accounts: [{ name: result.account.name, authority: 'active' }]
+        };
+      },
+      requestSignature: async (payload) => {
+        return await providerInstance.signTransaction(payload.transaction);
+      },
+      forgetIdentity: async () => {
+        return await providerInstance.disconnect();
+      }
+    };
+  }
 
-  // Announce availability
+  if (!window.scatter) {
+    window.scatter = {
+      connect: async () => {
+        return await providerInstance.connect();
+      },
+      disconnect: async () => {
+        return await providerInstance.disconnect();
+      },
+      getIdentity: async () => {
+        const result = await providerInstance.connect();
+        return {
+          accounts: [{ name: result.account.name, authority: 'active' }]
+        };
+      },
+      forgetIdentity: async () => {
+        return await providerInstance.disconnect();
+      },
+      requestSignature: async (payload) => {
+        return await providerInstance.signTransaction(payload.transaction);
+      }
+    };
+  }
+
+  // Dispatch event to notify page that wallet is available
   window.dispatchEvent(new CustomEvent('bitsharesWalletReady', {
-    detail: { provider }
+    detail: { provider: window.bitsharesWallet }
   }));
-
-  // Also dispatch for beet compatibility
-  window.dispatchEvent(new CustomEvent('beetReady', {
-    detail: { beet: beetCompat }
-  }));
-
 })();

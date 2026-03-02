@@ -1,10 +1,12 @@
 /**
- * BitShares Wallet - Background Service Worker
+ * Privateness.network Wallet - Background Service Worker
  * Handles blockchain connections, dApp communication, and wallet state
  */
 
 import { WalletManager } from '../lib/wallet-manager.js';
 import { BitSharesAPI } from '../lib/bitshares-api.js';
+import { EmercoinNVS } from '../lib/emercoin-nvs.js';
+import { SkywireNetwork } from '../lib/skywire-network.js';
 
 // Default nodes per network (mirrors popup.js DEFAULT_NODES)
 const DEFAULT_NODES = {
@@ -26,6 +28,8 @@ class BackgroundService {
   constructor() {
     this.walletManager = new WalletManager();
     this.api = new BitSharesAPI();
+    this.emercoinNVS = new EmercoinNVS();
+    this.skywireNetwork = new SkywireNetwork();
     this.pendingRequests = new Map();
     this.contentPorts = new Map(); // Store ports by tabId for responding after approval
     this.autoLockMinutes = 5;
@@ -44,10 +48,16 @@ class BackgroundService {
     // Setup alarm for auto-lock
     this.setupAutoLock();
     
+    // Initialize Emercoin NVS for identity management
+    await this.emercoinNVS.connect();
+    
+    // Initialize Skywire for private networking
+    await this.skywireNetwork.initialize();
+    
     // Try to connect to blockchain
     this.connectToBlockchain();
     
-    console.log('BitShares Wallet background service initialized');
+    console.log('Privateness.network Wallet background service initialized');
   }
 
   async loadSettings() {
@@ -77,7 +87,18 @@ class BackgroundService {
       this.walletManager.api = null;
       this.walletManager._apiNodes = [...nodes]; // seed reconnect with correct nodes
 
-      this.api = new BitSharesAPI(nodes);
+      // Route node connections through Skywire for privacy
+      const routedNodes = [];
+      for (const node of nodes) {
+        const routed = await this.skywireNetwork.routeTrafficThroughSkywire(node);
+        if (routed.success) {
+          routedNodes.push(routed.routedUrl);
+        } else {
+          routedNodes.push(node); // Fallback to original if routing fails
+        }
+      }
+
+      this.api = new BitSharesAPI(routedNodes);
 
       await this.api.connect();
       console.log('Connected to BitShares blockchain via:', this.api.currentNode);
@@ -165,6 +186,16 @@ class BackgroundService {
 
       case 'WALLET_IMPORT':
         return await this.walletManager.importWallet(data.importData, data.password);
+
+      // Privateness.network operations
+      case 'STORE_EMERCOIN_IDENTITY':
+        return await this.handleStoreEmercoinIdentity(data.identityData);
+
+      case 'RETRIEVE_EMERCOIN_IDENTITY':
+        return await this.handleRetrieveEmercoinIdentity(data.accountId);
+
+      case 'GET_SKYWIRE_STATUS':
+        return await this.handleGetSkywireStatus();
 
       case 'WALLET_UNLOCK':
         const unlocked = await this.walletManager.unlock(data.password);
@@ -488,7 +519,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Connection request timed out. Please click the BitShares extension icon to approve.'));
+          reject(new Error('Connection request timed out. Please click the Privateness.network extension icon to approve.'));
         }
       }, 60000);
     });
@@ -565,7 +596,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Transaction signing request timed out. Please click the BitShares extension icon to approve.'));
+          reject(new Error('Transaction signing request timed out. Please click the Privateness.network extension icon to approve.'));
         }
       }, 60000);
     });
@@ -640,7 +671,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Transfer request timed out. Please click the BitShares extension icon to approve.'));
+          reject(new Error('Transfer request timed out. Please click the Privateness.network extension icon to approve.'));
         }
       }, 60000);
     });
@@ -1117,7 +1148,10 @@ class BackgroundService {
       try {
         const { to, amount, asset, memo } = request.params;
         // Map core asset symbols (BTS on mainnet, TEST on testnet) to the universal asset ID
-        const assetId = (asset === 'BTS' || asset === 'TEST') ? '1.3.0' : asset;
+        // Also preserve known gateway asset symbols like XBTSX.* for resolution in sendTransfer
+        const assetId = (asset === 'BTS' || asset === 'TEST') ? '1.3.0' : 
+                        (asset === 'XBTSX.NESS' || asset === 'XBTSX.NCH' || asset === 'XBTSX.EMC') ? asset : 
+                        asset;
 
         // Ensure wallet is unlocked (restore from session if needed)
         await this.walletManager.ensureUnlocked();
@@ -1216,7 +1250,7 @@ class BackgroundService {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: chrome.runtime.getURL('src/assets/icons/icon128.png'),
-      title: 'BitShares Wallet',
+      title: 'Privateness.network Wallet',
       message: 'Your wallet has been automatically locked.'
     });
   }
@@ -1244,6 +1278,38 @@ class BackgroundService {
         });
       });
     });
+  }
+
+  async handleStoreEmercoinIdentity(identityData) {
+    try {
+      await this.walletManager.ensureUnlocked();
+      const account = await this.walletManager.getCurrentAccount();
+      const result = await this.emercoinNVS.storeIdentity(account.id, identityData);
+      return { success: true, result };
+    } catch (error) {
+      console.error('Error storing Emercoin identity:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleRetrieveEmercoinIdentity(accountId) {
+    try {
+      await this.walletManager.ensureUnlocked();
+      const result = await this.emercoinNVS.retrieveIdentity(accountId);
+      return { success: true, result };
+    } catch (error) {
+      console.error('Error retrieving Emercoin identity:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleGetSkywireStatus() {
+    try {
+      return { success: true, status: { initialized: this.skywireNetwork.isInitialized } };
+    } catch (error) {
+      console.error('Error getting Skywire status:', error);
+      return { success: false, error: error.message };
+    }
   }
 }
 

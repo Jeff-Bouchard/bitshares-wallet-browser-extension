@@ -3,32 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BitShares Wallet - Secure Browser Extension for BitShares</title>
-  <meta name="description" content="A secure browser extension for the BitShares blockchain. Sign all 75 operation types, manage BTS plus gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC, and connect dApps — available for Chrome, Brave, and Firefox.">
-  <meta property="og:title" content="BitShares Wallet Extension">
-  <meta property="og:description" content="A secure browser extension for the BitShares blockchain. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC, and approve with human-readable confirmations.">
+  <title>Privateness.network BitShares Wallet - Secure Browser Extension for BitShares</title>
+  <meta name="description" content="A secure browser extension for the BitShares blockchain under Privateness.network. Sign all 75 operation types, manage BTS plus gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC with Emercoin's identity touch, and connect dApps — available for Chrome, Brave, and Firefox.">
+  <meta property="og:title" content="Privateness.network BitShares Wallet Extension">
+  <meta property="og:description" content="A secure browser extension for the BitShares blockchain under Privateness.network. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC with Emercoin's identity touch, and approve with human-readable confirmations.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="BitShares Wallet Extension">
-  <meta name="twitter:description" content="A secure browser extension for the BitShares blockchain. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC, and approve with human-readable confirmations.">
+  <meta name="twitter:title" content="Privateness.network BitShares Wallet Extension">
+  <meta name="twitter:description" content="A secure browser extension for the BitShares blockchain under Privateness.network. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC with Emercoin's identity touch, and approve with human-readable confirmations.">
   <link rel="canonical" href="https://pi314x.github.io/bitshares-wallet-browser-extension/">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "BitShares Wallet Extension",
+    "name": "Privateness.network BitShares Wallet Extension",
     "operatingSystem": "Chrome, Brave, Firefox",
     "applicationCategory": "FinanceApplication",
     "softwareVersion": "0.6.0",
-    "description": "A secure browser extension for the BitShares blockchain. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC, and approve with human-readable confirmations.",
+    "description": "A secure browser extension for the BitShares blockchain under Privateness.network. Sign all 75 operation types, manage gateway assets like XBTSX.NESS/XBTSX.NCH/XBTSX.EMC with Emercoin's identity touch, and approve with human-readable confirmations.",
     "url": "https://pi314x.github.io/bitshares-wallet-browser-extension/",
     "downloadUrl": "https://github.com/pi314x/bitshares-wallet-browser-extension/releases",
     "codeRepository": "https://github.com/pi314x/bitshares-wallet-browser-extension",
     "license": "https://opensource.org/licenses/MIT",
     "author": {
       "@type": "Organization",
-      "name": "BitShares Community"
+      "name": "Privateness.network"
     },
     "offers": {
       "@type": "Offer",
@@ -711,7 +711,6 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 32px;
-      counter-reset: step;
     }
 
     .install-step {
@@ -720,7 +719,6 @@
       background: var(--bg-card);
       border: 1px solid rgba(0, 212, 170, 0.08);
       border-radius: 16px;
-      counter-increment: step;
       transition: border-color 0.3s;
     }
 
@@ -729,7 +727,7 @@
     }
 
     .install-step::before {
-      content: counter(step);
+      content: '';
       position: absolute;
       top: -14px;
       left: 28px;
@@ -968,8 +966,10 @@
           <circle cx="100" cy="48" r="4" fill="#0088FF" opacity="0.6"/>
           <circle cx="28" cy="80" r="4" fill="#00D4AA" opacity="0.6"/>
           <circle cx="100" cy="80" r="4" fill="#0088FF" opacity="0.6"/>
+          <line x1="32" y1="48" x2="40" y2="48" stroke="#00D4AA" stroke-width="1" opacity="0.4"/>
+          <line x1="32" y1="80" x2="40" y2="80" stroke="#00D4AA" stroke-width="1" opacity="0.4"/>
         </svg>
-        BitShares Wallet
+        Privateness.network BitShares Wallet
       </a>
       <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
       <ul class="nav-links">
@@ -1009,8 +1009,8 @@
           <line x1="32" y1="80" x2="40" y2="80" stroke="#00D4AA" stroke-width="1" opacity="0.4"/>
         </svg>
       </div>
-      <h1>BitShares Wallet</h1>
-      <p>A secure browser extension for the BitShares blockchain. Manage assets (including <code>XBTSX.*</code> gateway symbols), sign <strong style="color:var(--primary)">all 75 operation types</strong>, and connect to dApps.</p>
+      <h1>Privateness.network BitShares Wallet</h1>
+      <p>A secure browser extension for the BitShares blockchain under Privateness.network. Manage assets (including <code>XBTSX.*</code> gateway symbols) with Emercoin's decentralized identity, sign <strong style="color:var(--primary)">all 75 operation types</strong>, and connect to dApps.</p>
       <div class="hero-buttons">
         <a href="https://github.com/pi314x/bitshares-wallet-browser-extension/releases" class="btn btn-primary" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1079,7 +1079,7 @@
             <defs><linearGradient id="s6G" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00D4AA"/><stop offset="50%" stop-color="#00B4D8"/><stop offset="100%" stop-color="#0077B6"/></linearGradient><radialGradient id="s6W" cx="50%" cy="30%" r="50%"><stop offset="0%" stop-color="rgba(0,212,170,0.12)"/><stop offset="100%" stop-color="transparent"/></radialGradient></defs>
             <rect width="360" height="520" fill="#0a0e17"/><rect width="360" height="300" fill="url(#s6W)"/>
             <g transform="translate(130,80)"><polygon points="50,5 95,30 95,70 50,95 5,70 5,30" fill="none" stroke="url(#s6G)" stroke-width="3"/><polygon points="50,20 75,35 75,65 50,80 25,65 25,35" fill="url(#s6G)" opacity="0.3"/><text x="50" y="58" text-anchor="middle" fill="url(#s6G)" font-size="24" font-weight="bold" font-family="sans-serif">BTS</text></g>
-            <text x="180" y="210" text-anchor="middle" fill="url(#s6G)" font-size="26" font-weight="700" font-family="sans-serif">BitShares Wallet</text><text x="180" y="236" text-anchor="middle" fill="#94a3b8" font-size="13" font-family="sans-serif">Your gateway to decentralized finance</text>
+            <text x="180" y="210" text-anchor="middle" fill="url(#s6G)" font-size="26" font-weight="700" font-family="sans-serif">Privateness.network BitShares Wallet</text><text x="180" y="236" text-anchor="middle" fill="#94a3b8" font-size="13" font-family="sans-serif">Your gateway to decentralized finance</text>
             <rect x="40" y="280" width="280" height="50" rx="12" fill="url(#s6G)"/><text x="70" y="311" fill="#0a0e17" font-size="18">+</text><text x="95" y="311" fill="#0a0e17" font-size="15" font-weight="600" font-family="sans-serif">Create New Wallet</text>
             <rect x="40" y="346" width="280" height="50" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><text x="70" y="377" fill="#f1f5f9" font-size="18">&#x2193;</text><text x="95" y="377" fill="#f1f5f9" font-size="15" font-weight="600" font-family="sans-serif">Import Existing Wallet</text>
             <text x="180" y="450" text-anchor="middle" fill="#64748b" font-size="12" font-family="sans-serif">&#x1F512; Your keys never leave your device</text>
@@ -1098,7 +1098,7 @@
             <circle cx="56" cy="88" r="22" fill="url(#sG)" opacity="0.3"/><circle cx="56" cy="88" r="22" fill="none" stroke="url(#sG)" stroke-width="1.5"/><rect x="44" y="78" width="8" height="8" rx="1" fill="#00D4AA" opacity="0.7"/><rect x="54" y="78" width="8" height="8" rx="1" fill="#00B4D8" opacity="0.7"/><rect x="44" y="88" width="8" height="8" rx="1" fill="#0088FF" opacity="0.7"/><rect x="54" y="88" width="8" height="8" rx="1" fill="#00D4AA" opacity="0.5"/>
             <text x="90" y="86" fill="#f1f5f9" font-size="15" font-weight="600" font-family="sans-serif">my-account</text><text x="90" y="102" fill="#64748b" font-size="11" font-family="monospace">1.2.12345</text>
             <line x1="40" y1="120" x2="320" y2="120" stroke="rgba(148,163,184,0.1)"/><text x="180" y="139" text-anchor="middle" fill="#64748b" font-size="11" font-family="sans-serif">Total Balance</text><text x="180" y="168" text-anchor="middle" fill="url(#sG)" font-size="26" font-weight="700" font-family="monospace">125,432.50 BTS</text><text x="180" y="190" text-anchor="middle" fill="#94a3b8" font-size="13" font-family="sans-serif">&#x2248; $130.04 USD</text><text x="180" y="208" text-anchor="middle" fill="#64748b" font-size="10" font-family="monospace">1 BTS = $0.00103662</text>
-            <g transform="translate(20,230)"><rect width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="37" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="37" y="30" text-anchor="middle" fill="#00D4AA" font-size="16">&#x2191;</text><text x="37" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">Send</text><rect x="82" width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="119" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="119" y="30" text-anchor="middle" fill="#00D4AA" font-size="16">&#x2193;</text><text x="119" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">Receive</text><rect x="164" width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="201" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="201" y="30" text-anchor="middle" fill="#00D4AA" font-size="16">&#x21C4;</text><text x="201" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">Swap</text><rect x="246" width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="283" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="283" y="30" text-anchor="middle" fill="#00D4AA" font-size="14">&#x1F4DC;</text><text x="283" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">History</text></g>
+            <g transform="translate(20,230)"><rect width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="37" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="37" y="30" text-anchor="middle" fill="#00D4AA" font-size="16">&#x2191;</text><text x="37" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">Send</text><rect x="82" width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="119" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="119" y="30" text-anchor="middle" fill="#00D4AA" font-size="16">&#x2193;</text><text x="119" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">Receive</text><rect x="164" width="74" height="68" rx="12" fill="#1a2235" stroke="rgba(148,163,184,0.1)"/><circle cx="201" cy="24" r="16" fill="rgba(0,212,170,0.1)"/><text x="201" y="30" text-anchor="middle" fill="#00D4AA" font-size="14">&#x1F4DC;</text><text x="201" y="56" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="sans-serif">History</text></g>
             <rect x="20" y="314" width="320" height="190" rx="12" fill="#1a2235"/><text x="36" y="340" fill="#94a3b8" font-size="13" font-weight="600" font-family="sans-serif">Assets</text>
             <circle cx="48" cy="370" r="16" fill="url(#sG)"/><text x="48" y="375" text-anchor="middle" fill="#0a0e17" font-size="9" font-weight="700" font-family="sans-serif">BTS</text><text x="74" y="366" fill="#f1f5f9" font-size="13" font-weight="500" font-family="sans-serif">BitShares</text><text x="74" y="380" fill="#64748b" font-size="11">BTS</text><text x="324" y="366" text-anchor="end" fill="#f1f5f9" font-size="13" font-weight="500" font-family="monospace">125,432.50</text><text x="324" y="380" text-anchor="end" fill="#64748b" font-size="11">$130.04</text>
             <circle cx="48" cy="414" r="16" fill="url(#sG)"/><text x="48" y="418" text-anchor="middle" fill="#0a0e17" font-size="7" font-weight="700" font-family="sans-serif">USD</text><text x="74" y="410" fill="#f1f5f9" font-size="13" font-weight="500" font-family="sans-serif">HONEST.USD</text><text x="74" y="424" fill="#64748b" font-size="11">USD</text><text x="324" y="410" text-anchor="end" fill="#f1f5f9" font-size="13" font-weight="500" font-family="monospace">1,250.00</text><text x="324" y="424" text-anchor="end" fill="#64748b" font-size="11">$1,250.00</text>
@@ -1266,10 +1266,7 @@
         <div class="browser-item">
           <div class="browser-icon">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#FB542B" opacity="0.9"/>
-              <path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12V2z" fill="#FB542B"/>
-              <path d="M12 6L7 9v3.5c0 3.33 2.13 6.44 5 7.5V6z" fill="#fff" opacity="0.3"/>
-            </svg>
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
           </div>
           <h4>Brave</h4>
           <span>Manifest V3</span>
@@ -1277,10 +1274,7 @@
         <div class="browser-item">
           <div class="browser-icon">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" fill="#FF7139" opacity="0.9"/>
-              <path d="M18 8.5c-.5-2-2.5-3.5-5-3.5C9.5 5 7 7.5 7 10.5c0 2 1 3.5 2.5 4.5.5.3 1 .5 1.5.5h4c2 0 3.5-1.5 3.5-3.5 0-1.5-1-2.5-2-3" fill="#fff" opacity="0.4"/>
-              <circle cx="12" cy="12" r="3" fill="#fff" opacity="0.6"/>
-            </svg>
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
           </div>
           <h4>Firefox</h4>
           <span>Manifest V2</span>
@@ -1658,7 +1652,7 @@
             </defs>
             <path d="M40 32 L40 96 L72 96 C88 96 96 84 96 72 C96 62 90 54 80 52 C88 50 92 42 92 34 C92 22 84 32 72 32 L40 32 Z M52 44 L68 44 C76 44 80 48 80 54 C80 60 76 64 68 64 L52 64 L52 44 Z M52 72 L72 72 C80 72 84 76 84 82 C84 88 80 84 72 84 L52 84 L52 72 Z" fill="url(#fGrad)"/>
           </svg>
-          BitShares Wallet v0.6.0 &middot; MIT License
+          Privateness.network BitShares Wallet v0.6.0 &middot; MIT License
         </div>
         <div class="footer-links">
           <a href="https://github.com/pi314x/bitshares-wallet-browser-extension" target="_blank">GitHub</a>
