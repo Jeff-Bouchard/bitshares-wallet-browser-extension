@@ -339,3 +339,64 @@ describe('WalletManager.isUnlocked()', () => {
     expect(result).toBe(true);
   });
 }, 60000);
+
+// ---------------------------------------------------------------------------
+// key retrieval
+// ---------------------------------------------------------------------------
+describe('WalletManager key retrieval methods', () => {
+  let manager;
+
+  beforeEach(() => {
+    resetStorage();
+    manager = new WalletManager();
+  });
+
+  afterEach(async () => {
+    await silentLock(manager);
+  });
+
+  test('getPrivateKey returns active key pair for valid wallet password', async () => {
+    await manager.createWallet('My Wallet', TEST_PASSWORD, TEST_BRAINKEY);
+
+    const keyPair = await manager.getPrivateKey(TEST_PASSWORD, 'active');
+    expect(keyPair).toBeTruthy();
+    expect(keyPair.privateKey).toBe(manager.decryptedKeys.active.privateKey);
+    expect(keyPair.publicKey).toBe(manager.decryptedKeys.active.publicKey);
+  });
+
+  test('getPrivateKey returns null for invalid wallet password', async () => {
+    await manager.createWallet('My Wallet', TEST_PASSWORD, TEST_BRAINKEY);
+
+    const keyPair = await manager.getPrivateKey(WRONG_PASSWORD, 'active');
+    expect(keyPair).toBeNull();
+  });
+
+  test('getBitsharesPassword returns stored credentials for password-based wallet', async () => {
+    const accountName = 'alice-test';
+    const bitsharesPassword = 'Sup3rS3cret!';
+
+    const addSpy = jest.spyOn(manager, 'findAndAddAccountByName').mockResolvedValue(true);
+    await manager.createWallet(
+      'My Wallet',
+      TEST_PASSWORD,
+      TEST_BRAINKEY,
+      accountName,
+      bitsharesPassword,
+      'mainnet'
+    );
+
+    const credentials = await manager.getBitsharesPassword(TEST_PASSWORD);
+    expect(credentials).toEqual({ accountName, password: bitsharesPassword });
+
+    addSpy.mockRestore();
+  });
+
+  test('getBitsharesPassword rejects on invalid wallet password', async () => {
+    const addSpy = jest.spyOn(manager, 'findAndAddAccountByName').mockResolvedValue(true);
+    await manager.createWallet('My Wallet', TEST_PASSWORD, TEST_BRAINKEY, 'alice-test', 'Sup3rS3cret!', 'mainnet');
+
+    await expect(manager.getBitsharesPassword(WRONG_PASSWORD)).rejects.toThrow('Invalid wallet password');
+
+    addSpy.mockRestore();
+  });
+}, 60000);

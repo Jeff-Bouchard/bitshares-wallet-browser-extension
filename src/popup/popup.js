@@ -340,50 +340,30 @@ async function initializeApp() {
 
 async function updateAssetsList(balances) {
   const assetsList = document.getElementById('assets-list');
+  if (!assetsList) return;
   assetsList.innerHTML = '';
 
-  const pinnedSymbols = ['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC'];
-  const pinnedAssets = (await Promise.all(
-    pinnedSymbols.map(async (sym) => {
+  const pinnedSymbols = new Set(['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC']);
+
+  const nonZeroBalances = balances.filter((balance) => parseInt(balance.amount) !== 0);
+  const balanceAssets = await Promise.all(
+    nonZeroBalances.map(async (balance) => {
       try {
-        return await btsAPI.getAsset(sym);
+        const asset = await btsAPI.getAsset(balance.asset_id);
+        return { balance, asset };
       } catch (_) {
         return null;
       }
     })
-  )).filter(Boolean);
+  );
 
-  for (const asset of pinnedAssets) {
-    const bal = balances.find(b => b.asset_id === asset.id) || { amount: 0 };
-    const precision = Math.pow(10, asset.precision);
-    const amount = (parseInt(bal.amount) / precision).toFixed(asset.precision);
+  for (const entry of balanceAssets) {
+    if (!entry || !entry.asset) continue;
 
-    const assetItem = document.createElement('div');
-    assetItem.className = 'asset-item';
-    assetItem.style.cursor = 'pointer';
-    assetItem.innerHTML = `
-      <div class="asset-icon">${escapeHtml(asset.symbol.substring(0, 3))}</div>
-      <div class="asset-info">
-        <div class="asset-name">${escapeHtml(asset.symbol)}</div>
-        <div class="asset-symbol">${escapeHtml(asset.id)}</div>
-      </div>
-      <div class="asset-balance">
-        <div class="asset-amount">${escapeHtml(amount)}</div>
-      </div>
-    `;
+    const { balance, asset } = entry;
+    const symbol = String(asset.symbol || '').toUpperCase();
+    if (pinnedSymbols.has(symbol)) continue;
 
-    assetItem.addEventListener('click', () => {
-      handleShowSend(asset.id);
-    });
-
-    assetsList.appendChild(assetItem);
-  }
-
-  for (const balance of balances) {
-    if (parseInt(balance.amount) === 0) continue;
-
-    const asset = await btsAPI.getAsset(balance.asset_id);
-    if (pinnedAssets.some(a => a.id === asset.id)) continue;
     const precision = Math.pow(10, asset.precision);
     const amount = (parseInt(balance.amount) / precision).toFixed(asset.precision);
 
@@ -5322,31 +5302,83 @@ async function initializeAPI() {
 async function loadDashboard() {
   try {
     const network = document.getElementById('network-select')?.value || 'mainnet';
+    const coreSymbol = getCoreSymbol(network);
+    const accountSelectorEl = document.getElementById('account-selector');
+    const accountNameEl = document.getElementById('account-name'); // legacy UI compatibility
+    const accountIdEl = document.getElementById('account-id');
+    const totalBalanceEl = document.getElementById('total-balance'); // legacy UI compatibility
+    const btsBalanceTileEl = document.getElementById('balance-bts');
+    const gatewayBalanceTiles = [
+      { symbol: 'XBTSX.NESS', el: document.getElementById('balance-ness') },
+      { symbol: 'XBTSX.NCH', el: document.getElementById('balance-nch') },
+      { symbol: 'XBTSX.EMC', el: document.getElementById('balance-emc') }
+    ];
+    const assetsListEl = document.getElementById('assets-list');
+
+    const setCoreBalance = (amount) => {
+      if (totalBalanceEl) totalBalanceEl.textContent = amount;
+      if (btsBalanceTileEl) btsBalanceTileEl.textContent = `${amount} ${coreSymbol}`;
+    };
+
+    const resetGatewayBalances = () => {
+      for (const tile of gatewayBalanceTiles) {
+        if (tile.el) tile.el.textContent = `0 ${tile.symbol}`;
+      }
+    };
+
+    const refreshGatewayBalances = async (balances) => {
+      await Promise.all(gatewayBalanceTiles.map(async (tile) => {
+        if (!tile.el) return;
+
+        try {
+          const asset = await btsAPI.getAsset(tile.symbol);
+          const bal = balances.find((b) => b.asset_id === asset.id);
+          const precision = Math.pow(10, asset.precision);
+          const amount = bal
+            ? (parseInt(bal.amount) / precision).toFixed(asset.precision)
+            : (0).toFixed(asset.precision);
+          tile.el.textContent = `${amount} ${asset.symbol}`;
+        } catch (_) {
+          tile.el.textContent = `0 ${tile.symbol}`;
+        }
+      }));
+    };
+
     const accounts = await walletManager.getAllAccounts(network);
     
     if (!accounts || accounts.length === 0) {
       // No accounts for this network
-      document.getElementById('account-selector').innerHTML = '<option value="">No accounts</option>';
-      document.getElementById('account-name').textContent = 'No Account';
-      document.getElementById('account-id').textContent = '';
-      document.getElementById('total-balance').textContent = '0.00000';
-      document.getElementById('assets-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No accounts yet</p></div>';
+      if (accountSelectorEl) accountSelectorEl.innerHTML = '<option value="">No accounts</option>';
+      if (accountNameEl) accountNameEl.textContent = 'No Account';
+      if (accountIdEl) {
+        accountIdEl.textContent = '';
+        accountIdEl.removeAttribute('data-account-id');
+      }
+      setCoreBalance('0.00000');
+      resetGatewayBalances();
+      if (assetsListEl) {
+        assetsListEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No accounts yet</p></div>';
+      }
       return;
     }
     
     // Populate account selector
-    const accountSelector = document.getElementById('account-selector');
     const activeAccount = await walletManager.getCurrentAccount();
-    
-    accountSelector.innerHTML = accounts.map(acc => {
-      const isActive = activeAccount && acc.id === activeAccount.id;
-      return `<option value="${escapeHtml(acc.id)}" ${isActive ? 'selected' : ''}>${escapeHtml(acc.name)}</option>`;
-    }).join('');
+
+    if (accountSelectorEl) {
+      accountSelectorEl.innerHTML = accounts.map(acc => {
+        const isActive = activeAccount && acc.id === activeAccount.id;
+        return `<option value="${escapeHtml(acc.id)}" ${isActive ? 'selected' : ''}>${escapeHtml(acc.name)}</option>`;
+      }).join('');
+    }
     
     // Load active account data
     if (activeAccount) {
-      document.getElementById('account-name').textContent = activeAccount.name;
-      document.getElementById('account-id').textContent = activeAccount.id;
+      if (accountNameEl) accountNameEl.textContent = activeAccount.name;
+      if (accountIdEl) {
+        accountIdEl.textContent = activeAccount.id;
+        accountIdEl.dataset.accountId = activeAccount.id;
+      }
       
       // Ensure API is connected
       if (!btsAPI || !btsAPI.isConnected) {
@@ -5363,17 +5395,22 @@ async function loadDashboard() {
           const btsAsset = await btsAPI.getAsset('1.3.0');
           const precision = Math.pow(10, btsAsset.precision);
           const amount = (parseInt(btsBalance.amount) / precision).toFixed(btsAsset.precision);
-          document.getElementById('total-balance').textContent = amount;
+          setCoreBalance(amount);
         } else {
-          document.getElementById('total-balance').textContent = '0.00000';
+          setCoreBalance('0.00000');
         }
+
+        await refreshGatewayBalances(balances);
         
         // Update assets list
         await updateAssetsList(balances);
       } catch (error) {
         console.error('Failed to load balances:', error);
-        document.getElementById('total-balance').textContent = '0.00000';
-        document.getElementById('assets-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load balances</p></div>';
+        setCoreBalance('0.00000');
+        resetGatewayBalances();
+        if (assetsListEl) {
+          assetsListEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load balances</p></div>';
+        }
       }
     }
   } catch (error) {

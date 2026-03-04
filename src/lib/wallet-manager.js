@@ -346,7 +346,8 @@ export class WalletManager {
       const encryptedData = await CryptoUtils.encrypt({
         brainkey: brainkey,
         bitsharesAccountName: bitsharesAccountName || null,
-        // Note: bitsharesPassword is intentionally NOT stored — only derived keys are kept.
+        // Stored inside wallet-encrypted payload so users can retrieve it later.
+        bitsharesPassword: bitsharesPassword || null,
         keys: keys,
         accounts: []
       }, encryptionKey);
@@ -404,6 +405,7 @@ export class WalletManager {
       let brainkey = null;
 
       let bitsharesAccountName = null;
+      let bitsharesPassword = null;
 
       const keyPrefix = network === 'testnet' ? 'TEST' : 'BTS';
 
@@ -416,6 +418,7 @@ export class WalletManager {
             keyPrefix
           );
           bitsharesAccountName = importData.accountName;
+          bitsharesPassword = importData.password;
           break;
 
         case 'brainkey':
@@ -435,8 +438,8 @@ export class WalletManager {
       const encryptedData = await CryptoUtils.encrypt({
         brainkey: brainkey,
         bitsharesAccountName: bitsharesAccountName,
-        // bitsharesPassword intentionally NOT stored — only derived keys are kept.
-        // Storing the source password would expose it if the wallet password is compromised.
+        // Stored inside wallet-encrypted payload so users can retrieve it later.
+        bitsharesPassword: bitsharesPassword,
         keys: keys,
         accounts: []
       }, encryptionKey);
@@ -649,6 +652,84 @@ export class WalletManager {
     return this._walletData?.brainkey || null;
   }
 
+  async _resolveAccountFromWalletData(walletData, accountId = null) {
+    const accounts = Array.isArray(walletData?.accounts) ? walletData.accounts : [];
+    if (!accounts.length) return null;
+
+    if (accountId) {
+      const byId = accounts.find((a) => a.id === accountId);
+      if (byId) return byId;
+    }
+
+    const { activeAccountId } = await new Promise((resolve) => {
+      chrome.storage.local.get(['activeAccountId'], (r) => resolve(r));
+    });
+
+    if (activeAccountId) {
+      const active = accounts.find((a) => a.id === activeAccountId);
+      if (active) return active;
+    }
+
+    return accounts[0] || null;
+  }
+
+  async getPrivateKey(walletPassword, keyType = 'active', accountId = null) {
+    if (!walletPassword) return null;
+
+    const allowedTypes = new Set(['active', 'owner', 'memo']);
+    if (!allowedTypes.has(keyType)) {
+      throw new Error(`Invalid key type: ${keyType}`);
+    }
+
+    let walletData;
+    try {
+      walletData = await this._readDecryptedWalletData(walletPassword);
+    } catch (_) {
+      return null;
+    }
+
+    const account = await this._resolveAccountFromWalletData(walletData, accountId);
+    if (account?.watchOnly) {
+      return null;
+    }
+
+    const keys = account?.keys || walletData?.keys || null;
+    const keyPair = keys?.[keyType] || null;
+    if (!keyPair?.privateKey) {
+      return null;
+    }
+
+    return {
+      privateKey: keyPair.privateKey,
+      publicKey: keyPair.publicKey || ''
+    };
+  }
+
+  async getBitsharesPassword(walletPassword, accountId = null) {
+    if (!walletPassword) return null;
+
+    let walletData;
+    try {
+      walletData = await this._readDecryptedWalletData(walletPassword);
+    } catch (_) {
+      throw new Error('Invalid wallet password');
+    }
+
+    const account = await this._resolveAccountFromWalletData(walletData, accountId);
+    if (account?.watchOnly) {
+      return null;
+    }
+
+    const accountName = account?.name || walletData?.bitsharesAccountName || null;
+    const password = account?.bitsharesPassword || walletData?.bitsharesPassword || null;
+
+    if (!accountName || !password) {
+      return null;
+    }
+
+    return { accountName, password };
+  }
+
   async resetWallet() {
     await this.lock();
     this.currentWallet = null;
@@ -773,7 +854,8 @@ export class WalletManager {
       name: chainAccount.name,
       network,
       watchOnly: false,
-      keys
+      keys,
+      bitsharesPassword
     }];
     await this._persistWalletData({ ...this._walletData, accounts: nextAccounts });
     await this.setActiveAccount(chainAccount.id);
