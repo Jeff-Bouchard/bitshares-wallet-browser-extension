@@ -5,6 +5,37 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] — 2026-03-04
+
+### Added
+- **Expanded pinned gateway balances** in the dashboard top section: `XBTSX.NESS`,
+  `XBTSX.NCH`, `XBTSX.SKY`, `XBTSX.SCH`, `XBTSX.BTC`, `HONEST.BTC`, and
+  `XBTSX.EMC`
+- **Mixed market source display** in the dashboard price line with explicit source
+  tagging for bitUSD-backed prices
+- **Deterministic CoinPaprika coin-id overrides** for core ecosystem symbols:
+  - `BTS -> bts-bitshares`
+  - `BTC -> btc-bitcoin`
+  - `NESS -> ness-privateness`
+  - `NCH -> nch-ness-coin-hours`
+  - `SKY -> sky-skycoin`
+  - `EMC -> emc-emercoin`
+
+### Changed
+- **BTC gateway valuation path** now prefers on-chain bitUSD ticker markets for
+  `XBTSX.BTC` and `HONEST.BTC` before falling back to CoinPaprika
+- **Popup UX polish** for smoother visuals and denser top-balance layout (8-asset
+  dashboard tile grid, rounded micro-controls, and improved mobile behavior)
+- **Documentation refresh** across README + website docs with updated asset/pacing
+  details, colorful visual structure, and current pricing behavior notes
+- **Version bump** to `0.7.0` in package metadata and extension manifests
+
+### Fixed
+- **Stale BitShares CoinPaprika override** corrected from `bitshares-bts` to the
+  canonical `bts-bitshares`
+
+---
+
 ## [0.4.0] — 2026-03-01
 
 ### Added

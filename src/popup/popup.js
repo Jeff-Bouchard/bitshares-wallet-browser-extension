@@ -18,8 +18,24 @@ let isLocked = true;
 let isTabModeEnabled = false;
 const TAB_VIEW_PARAM = 'view';
 const TAB_VIEW_VALUE = 'tab';
+const MIN_POPUP_USABLE_WIDTH = 500;
+const LEFT_EDGE_THRESHOLD_PX = 16;
 const isStandaloneTab =
   new URLSearchParams(window.location.search).get(TAB_VIEW_PARAM) === TAB_VIEW_VALUE;
+const COINPAPRIKA_API_BASE = 'https://api.coinpaprika.com/v1';
+const COINPAPRIKA_PRICE_TTL_MS = 120000;
+const COINPAPRIKA_SYMBOL_OVERRIDES = {
+  BTS: 'bts-bitshares',
+  BTC: 'btc-bitcoin',
+  NESS: 'ness-privateness',
+  NCH: 'nch-ness-coin-hours',
+  SKY: 'sky-skycoin',
+  EMC: 'emc-emercoin'
+};
+const coinPaprikaCache = {
+  coinIdBySymbol: new Map(),
+  priceByCoinId: new Map()
+};
 
 // DOM Elements Cache
 const elements = {};
@@ -72,7 +88,45 @@ async function openWalletInBrowserTab() {
   await chrome.tabs.create({ url: tabUrl });
 }
 
+async function openWalletInStandaloneWindow() {
+  if (!chrome?.windows?.create) {
+    throw new Error('Window API is unavailable in this context');
+  }
+
+  const appUrl = chrome.runtime.getURL(`src/popup/popup.html?${TAB_VIEW_PARAM}=${TAB_VIEW_VALUE}`);
+  const availWidth = window.screen?.availWidth || 1920;
+  const availHeight = window.screen?.availHeight || 1080;
+  const availLeft = window.screen?.availLeft || 0;
+  const availTop = window.screen?.availTop || 0;
+
+  const targetWidth = Math.max(680, Math.min(980, Math.floor(availWidth * 0.38)));
+  const targetHeight = Math.max(760, Math.min(availHeight - 20, Math.floor(availHeight * 0.9)));
+  const left = availLeft + Math.max(0, availWidth - targetWidth - 20);
+  const top = availTop + Math.max(0, Math.floor((availHeight - targetHeight) / 2));
+
+  await chrome.windows.create({
+    url: appUrl,
+    type: 'popup',
+    width: targetWidth,
+    height: targetHeight,
+    left,
+    top,
+    focused: true
+  });
+}
+
+function shouldPromotePopupToStandaloneWindow() {
+  if (isStandaloneTab || isTabModeEnabled) return false;
+  if (!chrome?.windows?.create) return false;
+
+  const popupWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+  const popupLeft = window.screenX || 0;
+  return popupWidth < MIN_POPUP_USABLE_WIDTH || popupLeft <= LEFT_EDGE_THRESHOLD_PX;
+}
+
 function applyTabModeClass() {
+  document.documentElement.classList.toggle('tab-mode', isStandaloneTab);
+  document.documentElement.classList.toggle('app-tab', isStandaloneTab);
   document.body.classList.toggle('tab-mode', isStandaloneTab);
   document.body.classList.toggle('app-tab', isStandaloneTab);
   applyCompactLayout();
@@ -121,6 +175,244 @@ function applyCompactLayout() {
   const needsCompact = activeScreen.scrollHeight > container.clientHeight;
   document.body.classList.toggle('compact', needsCompact);
   container.classList.toggle('compact', needsCompact);
+}
+
+function normalizeCoinPaprikaSymbol(symbol) {
+  const upper = String(symbol || '').trim().toUpperCase();
+  if (!upper) return '';
+
+  const normalized = upper.includes('.') ? upper.split('.').pop() : upper;
+  return normalized.replace(/[^A-Z0-9]/g, '');
+}
+
+function formatUsd(value, options = {}) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    ...options
+  }).format(value);
+}
+
+function setDashboardPriceDisplays(totalText, detailText) {
+  const totalEl = document.getElementById('balance-usd');
+  const detailEl = document.getElementById('bts-price-display');
+
+  if (totalEl) totalEl.textContent = totalText;
+  if (detailEl) detailEl.textContent = detailText;
+}
+
+async function resolveCoinPaprikaCoinId(symbol) {
+  const normalized = normalizeCoinPaprikaSymbol(symbol);
+  if (!normalized || normalized === 'TEST') return null;
+
+  if (coinPaprikaCache.coinIdBySymbol.has(normalized)) {
+    return coinPaprikaCache.coinIdBySymbol.get(normalized);
+  }
+
+  const override = COINPAPRIKA_SYMBOL_OVERRIDES[normalized] || null;
+  if (override) {
+    coinPaprikaCache.coinIdBySymbol.set(normalized, override);
+    return override;
+  }
+
+  try {
+    const url = `${COINPAPRIKA_API_BASE}/search?q=${encodeURIComponent(normalized)}&c=currencies&limit=25`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`CoinPaprika search HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const currencies = Array.isArray(payload?.currencies) ? payload.currencies : [];
+    const exactMatches = currencies
+      .filter((entry) => String(entry?.symbol || '').toUpperCase() === normalized)
+      .sort((a, b) => {
+        const rankA = Number.isFinite(Number(a?.rank)) ? Number(a.rank) : Number.MAX_SAFE_INTEGER;
+        const rankB = Number.isFinite(Number(b?.rank)) ? Number(b.rank) : Number.MAX_SAFE_INTEGER;
+        return rankA - rankB;
+      });
+
+    const coinId = exactMatches[0]?.id || null;
+    coinPaprikaCache.coinIdBySymbol.set(normalized, coinId);
+    return coinId;
+  } catch (error) {
+    console.warn(`CoinPaprika symbol resolve failed for ${normalized}:`, error);
+    coinPaprikaCache.coinIdBySymbol.set(normalized, null);
+    return null;
+  }
+}
+
+async function fetchCoinPaprikaUsdPriceByCoinId(coinId) {
+  if (!coinId) return null;
+
+  const now = Date.now();
+  const cached = coinPaprikaCache.priceByCoinId.get(coinId);
+  if (cached && (now - cached.ts) < COINPAPRIKA_PRICE_TTL_MS) {
+    return cached.price;
+  }
+
+  try {
+    const url = `${COINPAPRIKA_API_BASE}/tickers/${encodeURIComponent(coinId)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`CoinPaprika ticker HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const price = Number(payload?.quotes?.USD?.price);
+    const safePrice = Number.isFinite(price) && price > 0 ? price : null;
+    coinPaprikaCache.priceByCoinId.set(coinId, { price: safePrice, ts: now });
+    return safePrice;
+  } catch (error) {
+    console.warn(`CoinPaprika ticker fetch failed for ${coinId}:`, error);
+    coinPaprikaCache.priceByCoinId.set(coinId, { price: null, ts: now });
+    return null;
+  }
+}
+
+async function getCoinPaprikaPricesBySymbol(symbols) {
+  const uniqueSymbols = [...new Set(
+    symbols
+      .map((symbol) => String(symbol || '').toUpperCase())
+      .filter(Boolean)
+  )];
+
+  const prices = {};
+
+  await Promise.all(uniqueSymbols.map(async (symbol) => {
+    const normalized = normalizeCoinPaprikaSymbol(symbol);
+    if (!normalized || normalized === 'TEST') {
+      prices[symbol] = null;
+      return;
+    }
+
+    const coinId = await resolveCoinPaprikaCoinId(normalized);
+    if (!coinId) {
+      prices[symbol] = null;
+      return;
+    }
+
+    const price = await fetchCoinPaprikaUsdPriceByCoinId(coinId);
+    prices[symbol] = Number.isFinite(price) && price > 0
+      ? { price, coinId, normalized, source: 'CoinPaprika' }
+      : null;
+  }));
+
+  return prices;
+}
+
+async function fetchBitUsdPriceBySymbol(symbol) {
+  if (!btsAPI?.isConnected) return null;
+
+  try {
+    const [asset, bitUsdAsset] = await Promise.all([
+      btsAPI.getAsset(symbol),
+      btsAPI.getAsset('USD')
+    ]);
+
+    if (!asset || !bitUsdAsset) return null;
+
+    const ticker = await btsAPI.call(
+      btsAPI.apiIds.database,
+      'get_ticker',
+      [bitUsdAsset.id, asset.id]
+    );
+
+    const price = Number.parseFloat(ticker?.latest);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch (error) {
+    console.warn(`bitUSD ticker fetch failed for ${symbol}:`, error);
+    return null;
+  }
+}
+
+async function updateDashboardMarketPrices(balances = [], coreSymbol = 'BTS') {
+  const requiredSymbols = [
+    coreSymbol,
+    'XBTSX.NESS',
+    'XBTSX.NCH',
+    'XBTSX.SKY',
+    'XBTSX.SCH',
+    'XBTSX.BTC',
+    'HONEST.BTC',
+    'XBTSX.EMC'
+  ];
+
+  if (!Array.isArray(balances) || balances.length === 0) {
+    setDashboardPriceDisplays('≈ $0.00 USD', 'Market: no assets to price');
+    return;
+  }
+
+  const balanceEntries = await Promise.all(
+    balances
+      .filter((balance) => balance && balance.asset_id)
+      .map(async (balance) => {
+        try {
+          const asset = await btsAPI.getAsset(balance.asset_id);
+          if (!asset) return null;
+          const precision = Math.pow(10, asset.precision);
+          const amount = Number(balance.amount) / precision;
+          return {
+            symbol: String(asset.symbol || '').toUpperCase(),
+            amount
+          };
+        } catch (_) {
+          return null;
+        }
+      })
+  );
+
+  const validEntries = balanceEntries.filter(Boolean);
+  const symbolsToPrice = [
+    ...new Set([...requiredSymbols, ...validEntries.map((entry) => entry.symbol)])
+  ];
+
+  const pricesBySymbol = await getCoinPaprikaPricesBySymbol(symbolsToPrice);
+
+  // Privateness BTC gateways have direct on-chain bitUSD markets.
+  // Use those feeds first when available.
+  const bitUsdPreferredSymbols = ['XBTSX.BTC', 'HONEST.BTC'];
+  await Promise.all(bitUsdPreferredSymbols.map(async (symbol) => {
+    if (!symbolsToPrice.includes(symbol)) return;
+
+    const bitUsdPrice = await fetchBitUsdPriceBySymbol(symbol);
+    if (!Number.isFinite(bitUsdPrice) || bitUsdPrice <= 0) return;
+
+    pricesBySymbol[symbol] = {
+      price: bitUsdPrice,
+      source: 'bitUSD'
+    };
+  }));
+
+  let totalUsd = 0;
+  let pricedAssetCount = 0;
+  for (const entry of validEntries) {
+    const priceInfo = pricesBySymbol[entry.symbol];
+    if (!priceInfo || !Number.isFinite(priceInfo.price) || priceInfo.price <= 0) continue;
+    totalUsd += entry.amount * priceInfo.price;
+    pricedAssetCount++;
+  }
+
+  const totalUsdText = pricedAssetCount > 0
+    ? `≈ ${formatUsd(totalUsd)} USD`
+    : '≈ USD valuation unavailable';
+
+  const priceLine = symbolsToPrice
+    .map((symbol) => {
+      const priceInfo = pricesBySymbol[symbol];
+      if (!priceInfo || !Number.isFinite(priceInfo.price) || priceInfo.price <= 0) {
+        return `${symbol}: n/a`;
+      }
+
+      const decimals = priceInfo.price >= 1 ? 4 : 8;
+      const sourceTag = priceInfo.source === 'bitUSD' ? ' (bitUSD)' : '';
+      return `${symbol}${sourceTag}: ${formatUsd(priceInfo.price, { minimumFractionDigits: 2, maximumFractionDigits: decimals })}`;
+    })
+    .join(' | ');
+
+  setDashboardPriceDisplays(totalUsdText, `Market: ${priceLine}`);
 }
 
 /**
@@ -321,6 +613,14 @@ async function initializeApp() {
       return;
     }
 
+    // Toolbar popups anchored near the left edge can appear clipped.
+    // In that case, promote to the full tab view.
+    if (shouldPromotePopupToStandaloneWindow()) {
+      await openWalletInBrowserTab();
+      window.close();
+      return;
+    }
+
     // Initialize wallet manager
     walletManager = new WalletManager();
 
@@ -381,7 +681,17 @@ async function updateAssetsList(balances) {
   if (!assetsList) return;
   assetsList.innerHTML = '';
 
-  const topSectionSymbols = new Set(['BTS', 'TEST', 'XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC']);
+  const topSectionSymbols = new Set([
+    'BTS',
+    'TEST',
+    'XBTSX.NESS',
+    'XBTSX.NCH',
+    'XBTSX.SKY',
+    'XBTSX.SCH',
+    'XBTSX.BTC',
+    'HONEST.BTC',
+    'XBTSX.EMC'
+  ]);
 
   const listedBalances = balances.filter((balance) => balance && balance.asset_id);
   const balanceAssets = await Promise.all(
@@ -2291,7 +2601,15 @@ async function loadSendAssets() {
       }
     }
 
-    const pinnedSymbols = ['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC'];
+    const pinnedSymbols = [
+      'XBTSX.NESS',
+      'XBTSX.NCH',
+      'XBTSX.SKY',
+      'XBTSX.SCH',
+      'XBTSX.BTC',
+      'HONEST.BTC',
+      'XBTSX.EMC'
+    ];
     for (const sym of pinnedSymbols) {
       const asset = await btsAPI.getAsset(sym);
       if (!asset) continue;
@@ -5349,9 +5667,15 @@ async function loadDashboard() {
     const gatewayBalanceTiles = [
       { symbol: 'XBTSX.NESS', el: document.getElementById('balance-ness') },
       { symbol: 'XBTSX.NCH', el: document.getElementById('balance-nch') },
+      { symbol: 'XBTSX.SKY', el: document.getElementById('balance-sky') },
+      { symbol: 'XBTSX.SCH', el: document.getElementById('balance-sch') },
+      { symbol: 'XBTSX.BTC', el: document.getElementById('balance-btc') },
+      { symbol: 'HONEST.BTC', el: document.getElementById('balance-honest-btc') },
       { symbol: 'XBTSX.EMC', el: document.getElementById('balance-emc') }
     ];
     const assetsListEl = document.getElementById('assets-list');
+
+    setDashboardPriceDisplays('≈ Calculating USD...', 'Market: loading prices...');
 
     const setCoreBalance = (amount) => {
       if (totalBalanceEl) totalBalanceEl.textContent = amount;
@@ -5397,6 +5721,7 @@ async function loadDashboard() {
       if (assetsListEl) {
         assetsListEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No accounts yet</p></div>';
       }
+      setDashboardPriceDisplays('≈ $0.00 USD', 'Market: no assets to price');
       return;
     }
     
@@ -5443,6 +5768,13 @@ async function loadDashboard() {
         // Update assets list
         await updateAssetsList(balances);
 
+        try {
+          await updateDashboardMarketPrices(balances, coreSymbol);
+        } catch (priceError) {
+          console.warn('Dashboard price update failed:', priceError);
+          setDashboardPriceDisplays('≈ USD valuation unavailable', 'Market: price feeds unavailable');
+        }
+
         // Keep swap balances in sync when the swap screen is open.
         if (currentScreen === 'swap-screen') {
           await refreshSwapBalances();
@@ -5451,13 +5783,17 @@ async function loadDashboard() {
         console.error('Failed to load balances:', error);
         setCoreBalance('0.00000');
         resetGatewayBalances();
+        setDashboardPriceDisplays('≈ USD valuation unavailable', 'Market: price feeds unavailable');
         if (assetsListEl) {
           assetsListEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load balances</p></div>';
         }
       }
+    } else {
+      setDashboardPriceDisplays('≈ $0.00 USD', 'Market: no active account selected');
     }
   } catch (error) {
     console.error('Dashboard load error:', error);
+    setDashboardPriceDisplays('≈ USD valuation unavailable', 'Market: dashboard load failed');
     showToast('Failed to load dashboard', 'error');
   }
 }

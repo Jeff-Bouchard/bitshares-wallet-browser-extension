@@ -1,12 +1,20 @@
-# Bitshares-NESS custodial wallet
+# ✨ Bitshares-NESS custodial wallet ✨
 
-A secure custodial browser extension for the BitShares blockchain. Supports Chrome, Brave, and Firefox, with BTS plus XBTSX gateway asset management, transaction signing, and dApp connectivity.
+A secure custodial browser extension for the BitShares blockchain. 💠 Supports Chrome, Brave, and Firefox, with BTS plus XBTSX gateway asset management, full operation signing, and dApp connectivity.
 
 ![Bitshares-NESS custodial wallet](./src/assets/icons/icon.svg)
 
-## Features
+![Version](https://img.shields.io/badge/version-0.7.0-00D4AA?style=for-the-badge)
+![BitShares Ops](https://img.shields.io/badge/operations-75-0088FF?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-22C55E?style=for-the-badge)
 
-### Wallet Management
+> 🌈 **UX + Data snapshot (v0.7.0):** Rounded NESS-themed dashboard, top pinned gateway balances, mixed price feeds (CoinPaprika + on-chain bitUSD fallback for BTC gateways), and deterministic CoinPaprika symbol mapping.
+
+---
+
+## 🚀 Features
+
+### 🔐 Wallet Management
 
 - Create new wallet with password-protected brainkey
 - Import existing wallets via:
@@ -18,17 +26,19 @@ A secure custodial browser extension for the BitShares blockchain. Supports Chro
 - Auto-lock functionality (configurable timer or disabled)
 - Backup brainkey for recovery
 - Multi-account support with watch-only accounts
+- Tab mode toggle opens the wallet as a full browser tab; constrained extension popups auto-promote to a standalone app window
 - Custodial account workflows optimized for browser extension UX
 
-### Asset Management
+### 💱 Asset Management
 
-- View BTS and all BitShares assets, including dotted gateway symbols like `XBTSX.NESS`, `XBTSX.NCH`, and `XBTSX.EMC`
+- View BTS and all BitShares assets, including pinned gateway symbols `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.SKY`, `XBTSX.SCH`, `XBTSX.BTC`, `HONEST.BTC`, and `XBTSX.EMC`
 - Real-time balance updates
-- USD value display with market prices (primary source: `XBTSX.USDT`, with sane fallbacks)
+- USD value display with market prices (CoinPaprika ticker API + on-chain bitUSD market fallback for `XBTSX.BTC` and `HONEST.BTC`)
+- Deterministic CoinPaprika symbol mapping for `BTS`, `BTC`, `NESS`, `NCH`, `SKY`, and `EMC` (`bts-bitshares`, `btc-bitcoin`, `ness-privateness`, `nch-ness-coin-hours`, `sky-skycoin`, `emc-emercoin`)
 - Full transaction history with filtering
 - QR code generation for receiving
 
-### Transactions
+### 📤 Transactions
 
 - Send core and gateway assets by object ID (`1.3.x`) or symbol (`BTS`, `TEST`, `XBTSX.*`)
 - Recipient account validation
@@ -37,11 +47,11 @@ A secure custodial browser extension for the BitShares blockchain. Supports Chro
 - Confirmation modal for all transactions
 - Reliable direct BitShares node connectivity with configurable node lists
 
-### Full Operation Signing (All 75 BitShares Operations)
+### ✍️ Full Operation Signing (All 75 BitShares Operations)
 
 The wallet supports signing all 75 BitShares blockchain operation types, not just transfers. Every operation shows a human-readable confirmation dialog before signing.
 
-#### Supported Operation Categories
+#### 🧩 Supported Operation Categories
 
 |Category|Operations|
 |---|---|
@@ -63,7 +73,7 @@ The wallet supports signing all 75 BitShares blockchain operation types, not jus
 |Credit|credit_offer_create, credit_offer_delete, credit_offer_update, credit_offer_accept, credit_deal_repay, credit_deal_expired|
 |Samet Fund|samet_fund_create, samet_fund_delete, samet_fund_update, samet_fund_borrow, samet_fund_repay|
 
-#### Human-Readable Operation Display
+#### 📝 Human-Readable Operation Display
 
 The signing confirmation dialog renders each operation in a readable format with clearly labeled fields. For example:
 
@@ -74,7 +84,7 @@ The signing confirmation dialog renders each operation in a readable format with
 
 Unknown or future operations gracefully fall back to a formatted JSON display.
 
-### dApp Integration
+### 🔌 dApp Integration
 
 - Connect to BitShares dApps
 - Sign transactions for connected sites
@@ -83,7 +93,7 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Event-based communication
 - Explicit permission-based dApp connectivity and transaction approval flows
 
-### Network Support
+### 🌐 Network Support
 
 - **BitShares Mainnet** and **BitShares Testnet** selectable at any point
   - Network selector on the welcome screen (before wallet creation or import)
@@ -92,7 +102,7 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Network-aware nodes, faucet URLs, and key prefixes (`BTS` / `TEST`)
 - Service worker stays in sync with the popup network — `ensureConnected()` reconnects to the stored network before every dApp request
 
-### Settings
+### ⚙️ Settings
 
 - Auto-lock timer configuration
 - Network selection (Mainnet/Testnet)
@@ -101,7 +111,9 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Change wallet password
 - Retrieve private keys (watch-only accounts clearly identified)
 
-## Testing
+---
+
+## 🧪 Testing
 
 The extension includes a Jest test suite (73 tests) covering the core cryptographic and wallet management logic.
 
@@ -331,7 +343,7 @@ to object IDs, refreshes block headers, signs with the user's active
 key, and broadcasts to the network.
 
 Each operation triggers a human-readable confirmation dialog in the
-extension popup. The user has **2 minutes** to approve or reject before
+extension popup. The user has **60 seconds** to approve or reject before
 the request times out.
 
 ```javascript
@@ -370,7 +382,7 @@ const orderResult = await window.bitsharesWallet.signTransaction({
 >
 > - `fee` can be `{ amount: 0, asset_id: '1.3.0' }` — the wallet fills the real fee.
 > - Account fields (`from`, `to`, `seller`, …) accept either object IDs (`1.2.xxxxx`) or account names (`my-account`).
-> - Asset fields accept either object IDs (`1.3.0`) or symbols (`BTS`, `TEST`, `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.EMC`, ...).
+> - Asset fields accept either object IDs (`1.3.0`) or symbols (`BTS`, `TEST`, `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.SKY`, `XBTSX.SCH`, `XBTSX.BTC`, `HONEST.BTC`, `XBTSX.EMC`, ...).
 > - Multi-operation transactions are supported — each operation is shown as a separate labeled section in the confirmation dialog.
 
 #### Asset Resolution Rules (Read Once, Save Future You)
@@ -379,7 +391,7 @@ When a transaction is approved, the wallet normalizes asset/account references b
 
 1. **Already numeric IDs** (`1.2.x`, `1.3.x`) are used as-is.
 2. **Core symbols** (`BTS` on mainnet, `TEST` on testnet) resolve to core asset `1.3.0`.
-3. **Gateway symbols** (including dotted symbols such as `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.EMC`) resolve to their canonical `1.3.x` object IDs.
+3. **Gateway symbols** (including dotted symbols such as `XBTSX.NESS`, `XBTSX.NCH`, `XBTSX.SKY`, `XBTSX.SCH`, `XBTSX.BTC`, `HONEST.BTC`, `XBTSX.EMC`) resolve to their canonical `1.3.x` object IDs.
 4. The signed transaction always contains canonical object IDs, so the node never receives ambiguous symbols.
 
 ### Transfers (Convenience Method)
@@ -456,7 +468,7 @@ await window.beet.forgetIdentity();
 
 - **Private keys** are encrypted using AES-256-GCM with PBKDF2-derived keys
 - **Brainkey** is never stored unencrypted
-- **Session storage** is used for temporary unlock state (cleared when browser closes)
+- **Unlock session state** is stored as encrypted data in `chrome.storage.session` when available (fallback: `chrome.storage.local`), with auto-lock timestamps and optional persisted session key only when auto-lock is disabled
 - **Auto-lock** prevents unauthorized access after inactivity
 - **dApp connections** require explicit user approval
 - **All transactions** must be confirmed in the popup with human-readable operation details
@@ -531,6 +543,7 @@ To deploy changes, push to the `main` branch. GitHub Pages serves from `Settings
 
 - **Website**: [pi314x.github.io/bitshares-wallet-browser-extension](https://pi314x.github.io/bitshares-wallet-browser-extension)
 - **Telegram**: [BitShares DEV](https://t.me/BitSharesDEV)
+- **Twitter/X**: [@PrivateNessN](https://x.com/PrivateNessN)
 - **GitHub Issues**: [Report bugs](https://github.com/pi314x/bitshares-wallet-browser-extension/issues)
 - **BitShares Forum**: [bitsharestalk.org](https://bitsharestalk.org)
 

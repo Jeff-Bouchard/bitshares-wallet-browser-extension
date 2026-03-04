@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Bitshares-NESS custodial wallet",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Bitshares-NESS custodial wallet for Firefox - manage BTS and XBTSX gateway assets, sign transactions, and interact with dApps",
   "author": "BitShares Developers",
   "homepage_url": "https://bitshares.org",
@@ -53,6 +53,7 @@
     "activeTab",
     "notifications",
     "alarms",
+    "https://api.coinpaprika.com/*",
     "https://faucet.xbts.io/*",
     "https://testnet-faucet.xbts.io/*"
   ],
