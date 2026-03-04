@@ -15,6 +15,7 @@ let walletManager = null;
 let btsAPI = null;
 let currentScreen = 'loading-screen';
 let isLocked = true;
+let isTabModeEnabled = false;
 
 // DOM Elements Cache
 const elements = {};
@@ -41,10 +42,82 @@ function cacheElements() {
   elements.historyScreen = document.getElementById('history-screen');
   elements.settingsScreen = document.getElementById('settings-screen');
   elements.toastContainer = document.getElementById('toast-container');
+  elements.tabModeToggle = document.getElementById('tab-mode-toggle');
+  elements.globalTabs = document.getElementById('global-tabs');
   
   // Modals
   elements.txConfirmModal = document.getElementById('tx-confirm-modal');
   elements.dappConnectModal = document.getElementById('dapp-connect-modal');
+}
+
+async function loadTabModePreference() {
+  const result = await chrome.storage.local.get(['tabModeEnabled']);
+  isTabModeEnabled = Boolean(result.tabModeEnabled);
+  if (elements.tabModeToggle) {
+    elements.tabModeToggle.checked = isTabModeEnabled;
+  }
+  applyTabModeClass();
+}
+
+function applyTabModeClass() {
+  document.body.classList.toggle('tab-mode', isTabModeEnabled);
+  applyCompactLayout();
+}
+
+async function handleTabModeToggle(e) {
+  isTabModeEnabled = Boolean(e.target.checked);
+  await chrome.storage.local.set({ tabModeEnabled: isTabModeEnabled });
+  applyTabModeClass();
+}
+
+function handleTabNavigation(tab) {
+  const target = tab.getAttribute('data-screen');
+  if (!target) return;
+  showScreen(target);
+}
+
+function updateActiveTab(screenId) {
+  if (!elements.globalTabs) return;
+  elements.globalTabs.querySelectorAll('.wallet-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.getAttribute('data-screen') === screenId);
+  });
+}
+
+function applyCompactLayout() {
+  const container = document.querySelector('.wallet-container');
+  const activeScreen = document.querySelector('.screen.active');
+  if (!container || !activeScreen) return;
+
+  // If active screen is taller than container, enable compact mode to avoid scroll.
+  const needsCompact = activeScreen.scrollHeight > container.clientHeight;
+  document.body.classList.toggle('compact', needsCompact);
+  container.classList.toggle('compact', needsCompact);
+}
+
+/**
+ * Show a specific screen and hide all others
+ */
+function showScreen(screenId) {
+  // Hide all screens
+  elements.screens?.forEach(screen => screen.classList.remove('active'));
+  
+  // Show target screen
+  const targetScreen = document.getElementById(screenId);
+  if (targetScreen) {
+    targetScreen.classList.add('active');
+    currentScreen = screenId;
+    
+    // Update active tab if in tab mode
+    updateActiveTab(screenId);
+    
+    // Apply compact layout after screen change
+    setTimeout(() => applyCompactLayout(), 50);
+    
+    // Screen-specific actions
+    if (screenId === 'create-wallet-screen') {
+      populateBtsPassword();
+    }
+  }
 }
 
 // Setup all event listeners
@@ -95,6 +168,10 @@ function setupEventListeners() {
   document.getElementById('history-filter-select')?.addEventListener('change', handleHistoryFilter);
   document.getElementById('btn-swap')?.addEventListener('click', handleShowSwap);
   document.getElementById('network-select')?.addEventListener('change', handleNetworkChange);
+  elements.tabModeToggle?.addEventListener('change', handleTabModeToggle);
+  document.querySelectorAll('.wallet-tab').forEach(tab => {
+    tab.addEventListener('click', () => handleTabNavigation(tab));
+  });
   document.getElementById('welcome-network-select')?.addEventListener('change', (e) => {
     const network = e.target.value;
     // Keep the dashboard selector in sync so handleGenerateWallet/handleImportWallet read the right value
@@ -205,6 +282,7 @@ function setupEventListeners() {
 // Initialize the application
 async function initializeApp() {
   try {
+    await loadTabModePreference();
     // Initialize wallet manager
     walletManager = new WalletManager();
 
@@ -241,6 +319,8 @@ async function initializeApp() {
       showScreen('welcome-screen');
     }
 
+    applyCompactLayout();
+
     // Test all nodes in background (don't await - runs asynchronously)
     testAllNodesInBackground();
 
@@ -255,854 +335,6 @@ async function initializeApp() {
     console.error('Initialization error:', error);
     showToast('Failed to initialize wallet', 'error');
     showScreen('welcome-screen');
-  }
-}
-
-/**
- * Test all nodes in background without showing UI notifications
- * Called on startup to populate node status for the nodes screen
- * Automatically connects to the fastest available node
- */
-async function testAllNodesInBackground() {
-  try {
-    const network = document.getElementById('network-select')?.value || 'mainnet';
-    const defaultNodes = DEFAULT_NODES[network] || DEFAULT_NODES.mainnet;
-    const savedNodes = await getSavedNodesForNetwork(network);
-    const allNodes = [...new Set([...defaultNodes, ...savedNodes])];
-
-    // Test all nodes in parallel
-    await Promise.all(allNodes.map(node => testNode(node)));
-    console.log('Background node testing complete');
-
-    // Find fastest online node
-    let fastestNode = null;
-    let fastestLatency = Infinity;
-
-    for (const [node, status] of nodeStatuses) {
-      if (status.online && status.latency < fastestLatency) {
-        fastestLatency = status.latency;
-        fastestNode = node;
-      }
-    }
-
-    // Connect to fastest node if found and not already connected
-    if (fastestNode && (!btsAPI || !btsAPI.isConnected || btsAPI.currentNode !== fastestNode)) {
-      console.log(`Connecting to fastest node: ${fastestNode} (${fastestLatency}ms)`);
-      try {
-        if (btsAPI) {
-          await btsAPI.disconnect();
-        }
-        btsAPI = new BitSharesAPI([fastestNode]);
-        await btsAPI.connect();
-        console.log('Connected to fastest node');
-      } catch (e) {
-        console.warn('Failed to connect to fastest node, falling back to default:', e);
-      }
-    }
-  } catch (error) {
-    console.error('Background node testing failed:', error);
-  }
-}
-
-// Initialize BitShares API connection
-async function initializeAPI() {
-  // Disconnect existing connection if any
-  if (btsAPI && btsAPI.isConnected) {
-    try {
-      await btsAPI.disconnect();
-    } catch (e) {
-      console.warn('Error disconnecting existing API:', e);
-    }
-  }
-
-  const network = document.getElementById('network-select')?.value || 'mainnet';
-  const nodes = await getNetworkNodes(network);
-
-  btsAPI = new BitSharesAPI(nodes);
-  await btsAPI.connect();
-
-  // Share the connected API with walletManager so account operations
-  // (add, verify keys, etc.) use the same network the user selected.
-  if (walletManager) {
-    walletManager.setApi(btsAPI);
-  }
-
-  // Keep the service worker in sync — it may have missed a NETWORK_SWITCH message
-  // (e.g. popup reconnects after wallet creation/import on a non-default network).
-  try {
-    chrome.runtime.sendMessage({ type: 'NETWORK_SWITCH', network }).catch(() => {});
-  } catch { /* ignore if service worker is not running */ }
-}
-
-// Get network nodes based on selected network (defaults + custom)
-async function getNetworkNodes(network) {
-  const defaults = DEFAULT_NODES[network] || DEFAULT_NODES.mainnet;
-  const customNodes = await getSavedNodesForNetwork(network);
-  return [...new Set([...defaults, ...customNodes])];
-}
-
-// Get faucet URL for a given network
-function getFaucetUrl(network) {
-  return network === 'testnet'
-    ? 'https://testnet-faucet.xbts.io/api/v1/accounts'
-    : 'https://faucet.xbts.io/api/v1/accounts';
-}
-
-// Get key prefix for a given network
-function getKeyPrefix(network) {
-  return network === 'testnet' ? 'TEST' : 'BTS';
-}
-
-// Get core currency symbol for a given network
-function getCoreSymbol(network) {
-  return network === 'testnet' ? 'TEST' : 'BTS';
-}
-
-// Screen navigation
-function showScreen(screenId) {
-  elements.screens.forEach(screen => {
-    screen.classList.remove('active');
-  });
-
-  const targetScreen = document.getElementById(screenId);
-  if (targetScreen) {
-    targetScreen.classList.add('active');
-    currentScreen = screenId;
-  }
-
-  // Re-enable unlock inputs when showing unlock screen
-  if (screenId === 'unlock-screen') {
-    const passwordField = document.getElementById('unlock-password');
-    const unlockBtn = document.getElementById('btn-unlock');
-    const eyeToggle = document.querySelector('.password-toggle[data-target="unlock-password"]');
-    if (passwordField) passwordField.disabled = false;
-    if (unlockBtn) unlockBtn.disabled = false;
-    if (eyeToggle) eyeToggle.disabled = false;
-  }
-
-  // Clear sensitive forms when navigating to welcome screen
-  if (screenId === 'welcome-screen') {
-    clearCreateWalletForm();
-    clearImportWalletForm();
-  }
-
-  // Auto-generate a fresh BitShares password each time the create screen is shown
-  if (screenId === 'create-wallet-screen') {
-    populateBtsPassword();
-  }
-}
-
-// Approval dismiss bar — auto-rejects after APPROVAL_TIMEOUT_MS milliseconds
-const APPROVAL_TIMEOUT_MS = 60_000;
-let _approvalDismissTimer = null;
-let _approvalDismissFill  = null;
-
-function startApprovalDismiss(fillId, onExpire) {
-  stopApprovalDismiss();
-  _approvalDismissFill = document.getElementById(fillId);
-  if (_approvalDismissFill) {
-    _approvalDismissFill.style.transition = 'none';
-    _approvalDismissFill.style.width = '100%';
-    void _approvalDismissFill.offsetWidth; // force reflow so transition starts from 100%
-    _approvalDismissFill.style.transition = `width ${APPROVAL_TIMEOUT_MS}ms linear`;
-    _approvalDismissFill.style.width = '0%';
-  }
-  _approvalDismissTimer = setTimeout(onExpire, APPROVAL_TIMEOUT_MS);
-}
-
-function stopApprovalDismiss() {
-  if (_approvalDismissTimer) { clearTimeout(_approvalDismissTimer); _approvalDismissTimer = null; }
-  if (_approvalDismissFill) {
-    _approvalDismissFill.style.transition = 'none';
-    _approvalDismissFill.style.width = '100%';
-    _approvalDismissFill = null;
-  }
-}
-
-const _approvalDismissMap = {
-  'dapp-connect-modal':     { fillId: 'connect-dismiss-fill',  onExpire: () => handleDappRejectUpdated() },
-  'dapp-transfer-modal':    { fillId: 'transfer-dismiss-fill', onExpire: () => handleTransferReject() },
-  'dapp-transaction-modal': { fillId: 'txsign-dismiss-fill',   onExpire: () => handleTransactionSignReject() },
-};
-
-// Show modal
-function showModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.classList.add('active');
-    const dismiss = _approvalDismissMap[modalId];
-    if (dismiss) startApprovalDismiss(dismiss.fillId, dismiss.onExpire);
-  }
-}
-
-// Hide modal
-function hideModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.classList.remove('active');
-    if (_approvalDismissMap[modalId]) stopApprovalDismiss();
-  }
-}
-
-// Toast notification
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  
-  elements.toastContainer.appendChild(toast);
-  
-  setTimeout(() => {
-    toast.style.animation = 'toastSlide 0.3s ease reverse';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-}
-
-// === Create Wallet Flow ===
-
-// Validate BitShares account name format
-function validateAccountNameFormat(name) {
-  if (!name) return null; // empty, not an error yet
-  if (name.length < 3) return 'Too short (min 3 characters)';
-  if (name.length > 41) return 'Too long (max 41 characters)';
-  if (!/^[a-z]/.test(name)) return 'Must start with a lowercase letter';
-  if (/[^a-z0-9-]/.test(name)) return 'Only lowercase letters, digits and hyphens allowed';
-  if (/--/.test(name)) return 'No consecutive hyphens allowed';
-  if (/-$/.test(name)) return 'Cannot end with a hyphen';
-  // Free (faucet) registration requires a hyphen, a digit, or no vowels.
-  // Pure letter names with vowels are "premium" names that require a paid fee.
-  const hasHyphen = name.includes('-');
-  const hasDigit = /[0-9]/.test(name);
-  const hasVowel = /[aeiou]/.test(name);
-  if (!hasHyphen && !hasDigit && hasVowel) {
-    return 'Premium name — must contain a hyphen or digit (e.g., my-name or name1) for free registration';
-  }
-  return null; // valid
-}
-
-let accountNameCheckTimeout;
-
-function handleAccountNameInput(e) {
-  const name = e.target.value.trim();
-  const statusEl = document.getElementById('wallet-account-name-status');
-
-  clearTimeout(accountNameCheckTimeout);
-
-  if (!name) {
-    statusEl.textContent = '';
-    updateGenerateButtonState();
-    return;
-  }
-
-  const formatError = validateAccountNameFormat(name);
-  if (formatError) {
-    statusEl.textContent = '✗ ' + formatError;
-    statusEl.className = 'input-status invalid';
-    updateGenerateButtonState();
-    return;
-  }
-
-  statusEl.textContent = 'Checking...';
-  statusEl.className = 'input-status';
-
-  accountNameCheckTimeout = setTimeout(async () => {
-    try {
-      if (btsAPI && btsAPI.isConnected) {
-        const account = await btsAPI.getAccount(name);
-        if (account) {
-          statusEl.textContent = '✗ Name already taken';
-          statusEl.className = 'input-status invalid';
-        } else {
-          statusEl.textContent = '✓ Name available';
-          statusEl.className = 'input-status valid';
-        }
-      } else {
-        statusEl.textContent = '✓ Valid format';
-        statusEl.className = 'input-status valid';
-      }
-    } catch (error) {
-      statusEl.textContent = '✓ Valid format';
-      statusEl.className = 'input-status valid';
-    }
-    updateGenerateButtonState();
-  }, 500);
-}
-
-// Generate a strong random password using the base58 alphabet (no 0/O/I/l confusion).
-// Produces a 45-char string: "P5" prefix + 43 random base58 characters.
-function generateStrongPassword() {
-  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  const len = alphabet.length; // 58
-  // Rejection sampling to eliminate modulo bias
-  const limit = 256 - (256 % len); // 232 — largest multiple of 58 ≤ 256
-  const result = [];
-  while (result.length < 43) {
-    const bytes = new Uint8Array(64); // over-sample to reduce loops
-    crypto.getRandomValues(bytes);
-    for (let i = 0; i < bytes.length && result.length < 43; i++) {
-      if (bytes[i] < limit) {
-        result.push(alphabet[bytes[i] % len]);
-      }
-    }
-  }
-  return 'P5' + result.join('');
-}
-
-function populateBtsPassword() {
-  const el = document.getElementById('wallet-bts-password');
-  if (el) el.value = generateStrongPassword();
-}
-
-async function handleCopyBtsPassword() {
-  const password = document.getElementById('wallet-bts-password')?.value;
-  if (!password) return;
-  try {
-    await navigator.clipboard.writeText(password);
-    showToast('BitShares password copied!', 'success');
-  } catch {
-    showToast('Failed to copy password', 'error');
-  }
-}
-
-function handlePasswordInput(e) {
-  const password = e.target.value;
-  const strengthIndicator = document.getElementById('password-strength');
-
-  if (strengthIndicator) {
-    const strength = calculatePasswordStrength(password);
-    strengthIndicator.className = 'password-strength ' + strength;
-  }
-
-  validatePasswordMatch();
-}
-
-function calculatePasswordStrength(password) {
-  if (password.length < 8) return 'weak';
-
-  let score = 0;
-  if (password.length >= 12) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[a-z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^A-Za-z0-9]/.test(password)) score++;
-
-  if (score < 3) return 'weak';
-  if (score < 4) return 'medium';
-  return 'strong';
-}
-
-function validatePasswordMatch() {
-  const password = document.getElementById('wallet-password')?.value;
-  const confirm = document.getElementById('wallet-password-confirm')?.value;
-
-  if (confirm && password !== confirm) {
-    document.getElementById('wallet-password-confirm')?.classList.add('error');
-  } else {
-    document.getElementById('wallet-password-confirm')?.classList.remove('error');
-  }
-
-  updateGenerateButtonState();
-}
-
-function updateGenerateButtonState() {
-  const accountName = document.getElementById('wallet-account-name')?.value?.trim();
-  const btsPassword = document.getElementById('wallet-bts-password')?.value;
-  const btsConfirm = document.getElementById('wallet-bts-password-confirm')?.value;
-  const password = document.getElementById('wallet-password')?.value;
-  const confirm = document.getElementById('wallet-password-confirm')?.value;
-  const agreed = document.getElementById('agree-terms')?.checked;
-  const btn = document.getElementById('btn-generate-wallet');
-
-  const accountNameFormatOk = accountName && !validateAccountNameFormat(accountName);
-  const accountNameStatusInvalid = document.getElementById('wallet-account-name-status')?.classList.contains('invalid');
-  const btsPasswordsMatch = btsPassword?.length > 0 && btsPassword === btsConfirm;
-  const localPasswordsMatch = password?.length >= 8 && password === confirm;
-
-  // Update BTS confirm status indicator
-  const btsConfirmStatus = document.getElementById('wallet-bts-confirm-status');
-  if (btsConfirmStatus) {
-    if (!btsConfirm) {
-      btsConfirmStatus.textContent = '';
-      btsConfirmStatus.className = 'input-status';
-    } else if (btsPassword === btsConfirm) {
-      btsConfirmStatus.textContent = '✓ Matches';
-      btsConfirmStatus.className = 'input-status valid';
-    } else {
-      btsConfirmStatus.textContent = '✗ Does not match';
-      btsConfirmStatus.className = 'input-status invalid';
-    }
-  }
-
-  const isValid = accountNameFormatOk && !accountNameStatusInvalid && btsPasswordsMatch && localPasswordsMatch && agreed;
-  btn.disabled = !isValid;
-}
-
-function clearCreateWalletForm() {
-  ['wallet-account-name', 'wallet-fee-account', 'wallet-bts-password-confirm',
-   'wallet-password', 'wallet-password-confirm'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const agreeTerms = document.getElementById('agree-terms');
-  if (agreeTerms) agreeTerms.checked = false;
-  const statusEl = document.getElementById('wallet-account-name-status');
-  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'input-status'; }
-  const btsConfirmStatus = document.getElementById('wallet-bts-confirm-status');
-  if (btsConfirmStatus) { btsConfirmStatus.textContent = ''; btsConfirmStatus.className = 'input-status'; }
-  // Regenerate a fresh BTS password
-  populateBtsPassword();
-  const btn = document.getElementById('btn-generate-wallet');
-  if (btn) btn.disabled = true;
-}
-
-async function handleGenerateWallet() {
-  const btsAccountName = document.getElementById('wallet-account-name')?.value?.trim();
-  const btsPassword = document.getElementById('wallet-bts-password')?.value;
-  const password = document.getElementById('wallet-password')?.value;
-  const feeAccount = document.getElementById('wallet-fee-account')?.value?.trim();
-
-  if (!btsAccountName) {
-    showToast('Please enter a BitShares account name', 'error');
-    return;
-  }
-  const nameError = validateAccountNameFormat(btsAccountName);
-  if (nameError) {
-    showToast('Account name: ' + nameError, 'error');
-    return;
-  }
-  if (!btsPassword) {
-    showToast('BitShares password is missing — please regenerate', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('btn-generate-wallet');
-  const originalText = btn.textContent;
-
-  try {
-    const network = document.getElementById('network-select')?.value || 'mainnet';
-    const keyPrefix = getKeyPrefix(network);
-
-    // Derive the keys that will control the on-chain account
-    const keys = await CryptoUtils.generateKeysFromPassword(btsAccountName, btsPassword, keyPrefix);
-
-    // Register account on-chain — via a wallet account if provided, otherwise faucet
-    btn.disabled = true;
-    btn.textContent = 'Registering account…';
-
-    if (feeAccount) {
-      showToast(`Registering account via "${feeAccount}"…`, 'info');
-      await walletManager.createAccountOnChain(btsAccountName, keys, feeAccount);
-    } else {
-      showToast('Registering account via faucet…', 'info');
-      await walletManager.registerAccountViaFaucet(btsAccountName, keys, getFaucetUrl(network));
-    }
-
-    // Generate brainkey for backup, then store the wallet locally
-    btn.textContent = 'Creating wallet…';
-    const brainkey = CryptoUtils.generateBrainkey();
-    await walletManager.createWallet('BitShares Wallet', password, brainkey, btsAccountName, btsPassword, network);
-
-    // Clear the form (also regenerates the displayed BTS password)
-    clearCreateWalletForm();
-
-    displayBrainkey(brainkey);
-    showScreen('backup-brainkey-screen');
-    showToast('Account registered! Save your brainkey and BitShares password.', 'success');
-  } catch (error) {
-    console.error('Failed to create wallet:', error);
-    showToast(error.message, 'error');
-    btn.disabled = false;
-    btn.textContent = originalText;
-    updateGenerateButtonState();
-  }
-}
-
-function displayBrainkey(brainkey) {
-  const container = document.getElementById('brainkey-display');
-  container.innerHTML = '';
-  
-  const words = brainkey.split(' ');
-  words.forEach((word, index) => {
-    const wordEl = document.createElement('div');
-    wordEl.className = 'brainkey-word';
-    wordEl.setAttribute('data-index', index + 1);
-    wordEl.textContent = word;
-    container.appendChild(wordEl);
-  });
-}
-
-async function handleCopyBrainkey() {
-  const words = document.querySelectorAll('.brainkey-word');
-  const brainkey = Array.from(words).map(w => w.textContent).join(' ');
-
-  try {
-    await navigator.clipboard.writeText(brainkey);
-    showToast('Brainkey copied to clipboard!', 'success');
-  } catch (error) {
-    showToast('Failed to copy brainkey', 'error');
-  }
-}
-
-async function copyCodeBlock(codeBlock, copyBtn) {
-  const code = codeBlock?.textContent || '';
-  try {
-    await navigator.clipboard.writeText(code);
-    showToast('Code copied!', 'success');
-    if (copyBtn) {
-      copyBtn.classList.add('copied');
-      setTimeout(() => copyBtn.classList.remove('copied'), 1500);
-    }
-  } catch (error) {
-    showToast('Failed to copy code', 'error');
-  }
-}
-
-async function handleVerifyBrainkey() {
-  await initializeAPI();
-  await loadDashboard();
-  showScreen('dashboard-screen');
-  isLocked = false;
-}
-
-// === Import Wallet Flow ===
-
-function setupImportTabs() {
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.import-tab-content');
-
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
-
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => c.classList.remove('active'));
-
-      btn.classList.add('active');
-      document.getElementById(tabId)?.classList.add('active');
-    });
-  });
-}
-
-function clearImportWalletForm() {
-  const fields = [
-    'import-account-name', 'import-account-password',
-    'import-brainkey-input',
-    'import-wallet-password', 'import-wallet-password-confirm'
-  ];
-  fields.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const statusEl = document.getElementById('import-account-name-status');
-  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'input-status'; }
-  // Reset tabs to default (account tab)
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.import-tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('.tab-btn[data-tab="import-account"]')?.classList.add('active');
-  document.getElementById('import-account')?.classList.add('active');
-}
-
-async function handleImportWallet() {
-  const activeTab = document.querySelector('.import-tab-content.active');
-  const tabId = activeTab?.id;
-  const walletPassword = document.getElementById('import-wallet-password')?.value;
-  const walletPasswordConfirm = document.getElementById('import-wallet-password-confirm')?.value;
-
-  if (!walletPassword || walletPassword.length < 8) {
-    showToast('Please enter a wallet password (min 8 characters)', 'error');
-    return;
-  }
-
-  if (walletPassword !== walletPasswordConfirm) {
-    showToast('Wallet passwords do not match', 'error');
-    return;
-  }
-
-  try {
-    let importData = {};
-
-    // Determine network before the switch so key verification can use it
-    const importNetwork = document.getElementById('network-select')?.value || 'mainnet';
-    const importKeyPrefix = getKeyPrefix(importNetwork);
-
-    switch (tabId) {
-      case 'import-account': {
-        const accountName = document.getElementById('import-account-name')?.value?.trim();
-        const accountPassword = document.getElementById('import-account-password')?.value;
-        if (!accountName) {
-          showToast('Please enter the BitShares account name', 'error');
-          return;
-        }
-        // No format validation here — premium/non-standard account names are valid on-chain
-        if (!accountPassword) {
-          showToast('Please enter the BitShares password', 'error');
-          return;
-        }
-
-        // Verify that the password matches the on-chain keys before creating the wallet
-        if (btsAPI && btsAPI.isConnected) {
-          const accountInfo = await btsAPI.getAccount(accountName);
-          if (!accountInfo) {
-            showToast('Account not found on the network', 'error');
-            return;
-          }
-          const verifyKeys = await CryptoUtils.generateKeysFromPassword(accountName, accountPassword, importKeyPrefix);
-          const generatedPubKeys = [verifyKeys.active.publicKey, verifyKeys.owner.publicKey, verifyKeys.memo.publicKey];
-          const onchainKeys = [
-            ...(accountInfo.active?.key_auths?.map(k => k[0]) || []),
-            ...(accountInfo.owner?.key_auths?.map(k => k[0]) || []),
-            accountInfo.options?.memo_key
-          ].filter(Boolean);
-          const hasMatch = generatedPubKeys.some(k => onchainKeys.includes(k));
-          if (!hasMatch) {
-            showToast('Password does not match this account\'s keys', 'error');
-            return;
-          }
-        }
-
-        importData = { type: 'account', accountName, password: accountPassword };
-        break;
-      }
-
-      case 'import-brainkey': {
-        const brainkey = document.getElementById('import-brainkey-input')?.value?.trim();
-        if (!brainkey) {
-          showToast('Please enter your brainkey', 'error');
-          return;
-        }
-        importData = { type: 'brainkey', brainkey };
-        break;
-      }
-    }
-
-    await walletManager.importWallet(importData, walletPassword, importNetwork);
-    await initializeAPI();
-    await loadDashboard();
-
-    // Clear form immediately after successful import
-    clearImportWalletForm();
-
-    showScreen('dashboard-screen');
-    isLocked = false;
-    showToast('Wallet imported successfully!', 'success');
-  } catch (error) {
-    console.error('Import error:', error);
-    showToast('Failed to import wallet: ' + error.message, 'error');
-  }
-}
-
-// === Unlock Flow ===
-
-async function handleUnlock() {
-  const passwordField = document.getElementById('unlock-password');
-  const unlockBtn = document.getElementById('btn-unlock');
-  const eyeToggle = document.querySelector('.password-toggle[data-target="unlock-password"]');
-  const password = passwordField?.value;
-
-  if (!password) {
-    showToast('Please enter your password', 'error');
-    return;
-  }
-
-  // Disable inputs while unlocking
-  if (passwordField) passwordField.disabled = true;
-  if (unlockBtn) unlockBtn.disabled = true;
-  if (eyeToggle) eyeToggle.disabled = true;
-
-  try {
-    const success = await walletManager.unlock(password);
-
-    if (success) {
-      // Show dots immediately (hide visible password)
-      passwordField.type = 'password';
-      if (eyeToggle) {
-        eyeToggle.querySelector('.eye-open').style.display = '';
-        eyeToggle.querySelector('.eye-closed').style.display = 'none';
-      }
-
-      await initializeAPI();
-      await loadDashboard();
-      showScreen('dashboard-screen');
-      isLocked = false;
-      // Clear password after transition
-      passwordField.value = '';
-
-      // Check for pending dApp approval requests after unlock
-      await checkPendingApproval();
-    } else {
-      showToast('Invalid password', 'error');
-      // Re-enable on failure
-      if (passwordField) passwordField.disabled = false;
-      if (unlockBtn) unlockBtn.disabled = false;
-      if (eyeToggle) eyeToggle.disabled = false;
-    }
-  } catch (error) {
-    console.error('Unlock error:', error);
-    showToast('Failed to unlock wallet', 'error');
-    // Re-enable on error
-    if (passwordField) passwordField.disabled = false;
-    if (unlockBtn) unlockBtn.disabled = false;
-    if (eyeToggle) eyeToggle.disabled = false;
-  }
-}
-
-async function handleLock() {
-  await walletManager.lock();
-  isLocked = true;
-  showScreen('unlock-screen');
-  showToast('Wallet locked', 'info');
-}
-
-// === Dashboard ===
-
-async function loadDashboard(forceReconnect = false) {
-  try {
-    // Ensure API is connected before loading data
-    if (!btsAPI || !btsAPI.isConnected || forceReconnect) {
-      await initializeAPI();
-    }
-
-    const network = document.getElementById('network-select')?.value || 'mainnet';
-    const allAccounts = await walletManager.getAllAccounts(network);
-
-    // If no accounts exist for this network, show empty state
-    if (allAccounts.length === 0) {
-      const accountSelector = document.getElementById('account-selector');
-      if (accountSelector) accountSelector.innerHTML = '<option value="">No accounts on this network</option>';
-      const accountNameEl = document.getElementById('account-name');
-      if (accountNameEl) accountNameEl.textContent = 'No account';
-      const accountIdEl = document.getElementById('account-id');
-      if (accountIdEl) accountIdEl.textContent = '';
-      const assetsList = document.getElementById('assets-list');
-      if (assetsList) assetsList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><p>No accounts on ${network}</p><p class="hint">Add or create an account for this network</p></div>`;
-      document.getElementById('balance-bts').textContent = `0 ${getCoreSymbol(network)}`;
-      document.getElementById('balance-usd').textContent = '';
-      return;
-    }
-
-    // Ensure active account is on the current network; if not, restore per-network selection
-    let account = await walletManager.getCurrentAccount();
-    if (!account || !allAccounts.find(a => a.id === account.id)) {
-      const stored = await chrome.storage.local.get(['activeAccountPerNetwork']);
-      const preferredId = stored.activeAccountPerNetwork?.[network];
-      account = (preferredId && allAccounts.find(a => a.id === preferredId)) || allAccounts[0];
-      await walletManager.setActiveAccount(account.id);
-    }
-
-    // Populate account selector
-    const accountSelector = document.getElementById('account-selector');
-    if (accountSelector) {
-      accountSelector.innerHTML = '';
-      allAccounts.forEach(acc => {
-        const option = document.createElement('option');
-        option.value = acc.id;
-        option.textContent = acc.watchOnly ? `${acc.name} (Watch Only)` : acc.name;
-        option.selected = acc.id === account.id;
-        accountSelector.appendChild(option);
-      });
-    }
-
-    // Update account info - check if watch-only
-    const isWatchOnly = await walletManager.isWatchOnlyAccount(account.id);
-    const accountIdEl = document.getElementById('account-id');
-    accountIdEl.textContent = isWatchOnly ? `${account.id} (Watch Only)` : account.id;
-    accountIdEl.dataset.accountId = account.id; // Store raw ID for comparisons
-
-    // Update avatar with identicon
-    const avatarCanvas = document.getElementById('account-avatar');
-    if (avatarCanvas) {
-      await renderIdenticonToCanvas(avatarCanvas, account.name);
-    }
-
-    // Load balances
-    await loadBalances(account.id);
-
-    // Load transaction history
-    await loadHistory(account.id);
-  } catch (error) {
-    console.error('Failed to load dashboard:', error);
-    // If first attempt failed and we haven't tried reconnecting yet, try once more
-    if (!forceReconnect) {
-      console.log('Retrying with fresh connection...');
-      try {
-        await loadDashboard(true);
-        return;
-      } catch (retryError) {
-        console.error('Retry also failed:', retryError);
-      }
-    }
-    showToast('Failed to load account data', 'error');
-  }
-}
-
-async function loadBalances(accountId) {
-  try {
-    // Check if account exists on chain
-    const network = document.getElementById('network-select')?.value || 'mainnet';
-    const coreSymbol = getCoreSymbol(network);
-
-    if (!accountId || accountId === '1.2.0') {
-      document.getElementById('balance-bts').textContent = `0 ${coreSymbol}`;
-      document.getElementById('balance-usd').textContent = '≈ $0.00 USD';
-      const assetsList = document.getElementById('assets-list');
-      assetsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No account on chain yet</p><p class="hint">Import an existing account to see balances</p></div>';
-      return;
-    }
-
-    // Ensure API is connected
-    if (!btsAPI || !btsAPI.isConnected) {
-      await initializeAPI();
-    }
-
-    const balances = await btsAPI.getAccountBalances(accountId);
-
-    // Update core asset balance using asset precision
-    const btsAsset = await btsAPI.getAsset('1.3.0');
-    const btsPrecision = btsAsset?.precision || 5;
-    const btsBalance = balances.find(b => b.asset_id === '1.3.0') || { amount: 0 };
-    const btsDivisor = Math.pow(10, btsPrecision);
-    const btsAmount = (parseInt(btsBalance.amount) / btsDivisor).toFixed(btsPrecision);
-    document.getElementById('balance-bts').textContent = `${btsAmount} ${coreSymbol}`;
-
-    // Price feed only available on mainnet
-    const priceDisplay = document.getElementById('bts-price-display');
-    if (network === 'testnet') {
-      document.getElementById('balance-usd').textContent = '';
-      if (priceDisplay) priceDisplay.textContent = 'Testnet — no price feed';
-    } else {
-      const btsPriceData = await btsAPI.getBTSPrice();
-      const btsPrice = btsPriceData.price || 0;
-      const usdValue = (parseFloat(btsAmount) * btsPrice).toFixed(2);
-      document.getElementById('balance-usd').textContent = `≈ $${usdValue} USD`;
-      if (priceDisplay && btsPrice > 0) {
-        priceDisplay.textContent = `1 BTS = $${btsPrice.toFixed(6)} (${btsPriceData.source || 'N/A'})`;
-      } else if (priceDisplay) {
-        priceDisplay.textContent = 'Price unavailable';
-      }
-    }
-
-    // Update assets list
-    await updateAssetsList(balances);
-  } catch (error) {
-    console.error('Failed to load balances:', error);
-    const network = document.getElementById('network-select')?.value || 'mainnet';
-    const networkLabel = network === 'testnet' ? 'testnet' : 'mainnet';
-    document.getElementById('balance-bts').textContent = `0 ${getCoreSymbol(network)}`;
-    document.getElementById('balance-usd').textContent = '';
-    const assetsList = document.getElementById('assets-list');
-    if (assetsList) {
-      // Distinguish "account doesn't exist on this network" from a real connection error
-      const isWrongNetwork = error.message && (
-        error.message.includes('account_ptr') ||
-        error.message.includes('no such account') ||
-        error.message.includes('Assert Exception')
-      );
-      if (isWrongNetwork) {
-        assetsList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🌐</div><p>This account is not on ${networkLabel}</p><p class="hint">Switch network or add your ${networkLabel} account</p></div>`;
-      } else {
-        assetsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load balances</p></div>';
-      }
-    }
   }
 }
 
@@ -4001,7 +3233,7 @@ async function showTransferApprovalModal(requestId, origin, params) {
 // Helper: reset the connect modal message text to its default after use
 function resetConnectModalMessage() {
   const msgEl = document.getElementById('dapp-connect-message');
-  if (msgEl) msgEl.textContent = 'This site wants to connect to your BitShares wallet';
+  if (msgEl) msgEl.textContent = 'This site wants to connect to your Bitshares-NESS custodial wallet';
 }
 
 // Update dApp handlers to use correct message types
@@ -5075,6 +4307,10 @@ async function checkAutoLock() {
 document.addEventListener('click', updateLastActivityTimestamp);
 document.addEventListener('keypress', updateLastActivityTimestamp);
 
+window.addEventListener('resize', () => {
+  applyCompactLayout();
+});
+
 // Check auto-lock on startup
 checkAutoLock();
 
@@ -6034,3 +5270,698 @@ async function handleExecuteSwap() {
   }
 }
 
+// === API and Dashboard Functions ===
+
+/**
+ * Initialize BitShares API connection
+ */
+async function initializeAPI() {
+  try {
+    const network = document.getElementById('network-select')?.value || 'mainnet';
+    const nodes = DEFAULT_NODES[network] || DEFAULT_NODES.mainnet;
+    
+    if (!btsAPI) {
+      btsAPI = new BitSharesAPI();
+    }
+    
+    // Try to connect to a node
+    let connected = false;
+    for (const node of nodes) {
+      try {
+        await btsAPI.connect(node);
+        connected = true;
+        console.log('Connected to node:', node);
+        break;
+      } catch (error) {
+        console.warn('Failed to connect to node:', node, error);
+      }
+    }
+    
+    if (!connected) {
+      throw new Error('Failed to connect to any node');
+    }
+    
+    // Notify background script of network change
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'NETWORK_CHANGED',
+        data: { network }
+      });
+    } catch (e) {
+      console.warn('Failed to notify background of network change:', e);
+    }
+  } catch (error) {
+    console.error('API initialization error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Load dashboard data
+ */
+async function loadDashboard() {
+  try {
+    const network = document.getElementById('network-select')?.value || 'mainnet';
+    const accounts = await walletManager.getAllAccounts(network);
+    
+    if (!accounts || accounts.length === 0) {
+      // No accounts for this network
+      document.getElementById('account-selector').innerHTML = '<option value="">No accounts</option>';
+      document.getElementById('account-name').textContent = 'No Account';
+      document.getElementById('account-id').textContent = '';
+      document.getElementById('total-balance').textContent = '0.00000';
+      document.getElementById('assets-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No accounts yet</p></div>';
+      return;
+    }
+    
+    // Populate account selector
+    const accountSelector = document.getElementById('account-selector');
+    const activeAccount = await walletManager.getCurrentAccount();
+    
+    accountSelector.innerHTML = accounts.map(acc => {
+      const isActive = activeAccount && acc.id === activeAccount.id;
+      return `<option value="${escapeHtml(acc.id)}" ${isActive ? 'selected' : ''}>${escapeHtml(acc.name)}</option>`;
+    }).join('');
+    
+    // Load active account data
+    if (activeAccount) {
+      document.getElementById('account-name').textContent = activeAccount.name;
+      document.getElementById('account-id').textContent = activeAccount.id;
+      
+      // Ensure API is connected
+      if (!btsAPI || !btsAPI.isConnected) {
+        await initializeAPI();
+      }
+      
+      // Load balances
+      try {
+        const balances = await btsAPI.getAccountBalances(activeAccount.id);
+        
+        // Calculate total balance in BTS
+        const btsBalance = balances.find(b => b.asset_id === '1.3.0');
+        if (btsBalance) {
+          const btsAsset = await btsAPI.getAsset('1.3.0');
+          const precision = Math.pow(10, btsAsset.precision);
+          const amount = (parseInt(btsBalance.amount) / precision).toFixed(btsAsset.precision);
+          document.getElementById('total-balance').textContent = amount;
+        } else {
+          document.getElementById('total-balance').textContent = '0.00000';
+        }
+        
+        // Update assets list
+        await updateAssetsList(balances);
+      } catch (error) {
+        console.error('Failed to load balances:', error);
+        document.getElementById('total-balance').textContent = '0.00000';
+        document.getElementById('assets-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load balances</p></div>';
+      }
+    }
+  } catch (error) {
+    console.error('Dashboard load error:', error);
+    showToast('Failed to load dashboard', 'error');
+  }
+}
+
+/**
+ * Get key prefix for network
+ */
+function getKeyPrefix(network) {
+  return network === 'testnet' ? 'TEST' : 'BTS';
+}
+
+/**
+ * Get faucet URL for network
+ */
+function getFaucetUrl(network) {
+  return network === 'testnet'
+    ? 'https://testnet.xbts.io/api/v1/accounts'
+    : 'https://faucet.xbts.io/api/v1/accounts';
+}
+
+/**
+ * Get core symbol for network
+ */
+function getCoreSymbol(network) {
+  return network === 'testnet' ? 'TEST' : 'BTS';
+}
+
+/**
+ * Test all nodes in background
+ */
+async function testAllNodesInBackground() {
+  try {
+    const network = document.getElementById('network-select')?.value || 'mainnet';
+    const nodes = DEFAULT_NODES[network] || DEFAULT_NODES.mainnet;
+    
+    for (const node of nodes) {
+      try {
+        const status = await testNode(node);
+        nodeStatuses.set(node, status);
+      } catch (error) {
+        nodeStatuses.set(node, { connected: false, latency: null });
+      }
+    }
+  } catch (error) {
+    console.error('Background node test error:', error);
+  }
+}
+
+// === Utility Functions ===
+
+/**
+ * Show a toast notification
+ */
+function showToast(message, type = 'info') {
+  const container = elements.toastContainer || document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+
+  // Trigger animation
+  setTimeout(() => toast.classList.add('show'), 10);
+
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+/**
+ * Show a modal by ID
+ */
+function showModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.add('active');
+  }
+}
+
+/**
+ * Hide a modal by ID
+ */
+function hideModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+/**
+ * Generate a strong random password
+ */
+function generateStrongPassword() {
+  const length = 52;
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += charset[array[i] % charset.length];
+  }
+  return password;
+}
+
+/**
+ * Populate the BitShares password field with a generated password
+ */
+function populateBtsPassword() {
+  const password = generateStrongPassword();
+  const el = document.getElementById('wallet-bts-password');
+  if (el) el.value = password;
+}
+
+/**
+ * Validate BitShares account name format
+ */
+function validateAccountNameFormat(name) {
+  if (!name) return 'Account name is required';
+  if (name.length < 3) return 'Account name must be at least 3 characters';
+  if (name.length > 63) return 'Account name must be less than 64 characters';
+  if (!/^[a-z]/.test(name)) return 'Account name must start with a lowercase letter';
+  if (!/^[a-z0-9.-]+$/.test(name)) return 'Account name can only contain lowercase letters, numbers, dots, and hyphens';
+  if (/--/.test(name)) return 'Account name cannot contain consecutive hyphens';
+  if (/\.\.|\.-|-\./.test(name)) return 'Invalid character combination in account name';
+  if (/\.$/.test(name)) return 'Account name cannot end with a dot';
+  return null;
+}
+
+/**
+ * Calculate password strength
+ */
+function calculatePasswordStrength(password) {
+  if (!password) return 'weak';
+  if (password.length < 8) return 'weak';
+  if (password.length < 12) return 'medium';
+  
+  let strength = 0;
+  if (/[a-z]/.test(password)) strength++;
+  if (/[A-Z]/.test(password)) strength++;
+  if (/[0-9]/.test(password)) strength++;
+  if (/[^a-zA-Z0-9]/.test(password)) strength++;
+  
+  if (password.length >= 16 && strength >= 3) return 'strong';
+  if (password.length >= 12 && strength >= 2) return 'medium';
+  return 'weak';
+}
+
+/**
+ * Handle account name input validation
+ */
+let accountNameCheckTimeout;
+async function handleAccountNameInput(e) {
+  const name = e.target.value.trim();
+  const statusEl = document.getElementById('wallet-account-name-status');
+  const generateBtn = document.getElementById('btn-generate-wallet');
+
+  clearTimeout(accountNameCheckTimeout);
+
+  if (!name) {
+    statusEl.textContent = '';
+    statusEl.className = 'input-status';
+    updateGenerateButtonState();
+    return;
+  }
+
+  const formatError = validateAccountNameFormat(name);
+  if (formatError) {
+    statusEl.textContent = '✗ ' + formatError;
+    statusEl.className = 'input-status invalid';
+    updateGenerateButtonState();
+    return;
+  }
+
+  statusEl.textContent = 'Checking availability...';
+  statusEl.className = 'input-status';
+
+  accountNameCheckTimeout = setTimeout(async () => {
+    try {
+      if (!btsAPI || !btsAPI.isConnected) {
+        await initializeAPI();
+      }
+      const exists = await btsAPI.getAccount(name);
+      if (exists) {
+        statusEl.textContent = '✗ Name already taken';
+        statusEl.className = 'input-status invalid';
+      } else {
+        statusEl.textContent = '✓ Available';
+        statusEl.className = 'input-status valid';
+      }
+    } catch (error) {
+      statusEl.textContent = '✓ Available';
+      statusEl.className = 'input-status valid';
+    }
+    updateGenerateButtonState();
+  }, 500);
+}
+
+/**
+ * Handle wallet password input
+ */
+function handlePasswordInput() {
+  updateGenerateButtonState();
+}
+
+/**
+ * Validate password match
+ */
+function validatePasswordMatch() {
+  const password = document.getElementById('wallet-password')?.value;
+  const confirm = document.getElementById('wallet-password-confirm')?.value;
+  const btsPassword = document.getElementById('wallet-bts-password')?.value;
+  const btsConfirm = document.getElementById('wallet-bts-password-confirm')?.value;
+
+  // Validate wallet password match
+  if (confirm && password !== confirm) {
+    return false;
+  }
+
+  // Validate BTS password match
+  if (btsConfirm && btsPassword !== btsConfirm) {
+    const statusEl = document.getElementById('wallet-bts-confirm-status');
+    if (statusEl) {
+      statusEl.textContent = '✗ Passwords do not match';
+      statusEl.className = 'input-status invalid';
+    }
+    return false;
+  } else if (btsConfirm && btsPassword === btsConfirm) {
+    const statusEl = document.getElementById('wallet-bts-confirm-status');
+    if (statusEl) {
+      statusEl.textContent = '✓ Passwords match';
+      statusEl.className = 'input-status valid';
+    }
+  }
+
+  updateGenerateButtonState();
+  return true;
+}
+
+/**
+ * Update the generate wallet button state
+ */
+function updateGenerateButtonState() {
+  const accountName = document.getElementById('wallet-account-name')?.value?.trim();
+  const btsPassword = document.getElementById('wallet-bts-password')?.value;
+  const btsConfirm = document.getElementById('wallet-bts-password-confirm')?.value;
+  const walletPassword = document.getElementById('wallet-password')?.value;
+  const walletConfirm = document.getElementById('wallet-password-confirm')?.value;
+  const agreeTerms = document.getElementById('agree-terms')?.checked;
+  const statusEl = document.getElementById('wallet-account-name-status');
+  const generateBtn = document.getElementById('btn-generate-wallet');
+
+  if (!generateBtn) return;
+
+  const isValid = accountName &&
+    btsPassword &&
+    btsConfirm &&
+    btsPassword === btsConfirm &&
+    walletPassword &&
+    walletPassword.length >= 8 &&
+    walletConfirm &&
+    walletPassword === walletConfirm &&
+    agreeTerms &&
+    statusEl?.classList.contains('valid');
+
+  generateBtn.disabled = !isValid;
+}
+
+/**
+ * Setup import wallet tabs
+ */
+function setupImportTabs() {
+  const tabs = document.querySelectorAll('.tab-btn');
+  const contents = document.querySelectorAll('.import-tab-content');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-tab');
+
+      tabs.forEach(t => t.classList.remove('active'));
+      contents.forEach(c => c.classList.remove('active'));
+
+      tab.classList.add('active');
+      const targetContent = document.getElementById(target);
+      if (targetContent) {
+        targetContent.classList.add('active');
+      }
+    });
+  });
+}
+
+/**
+ * Clear create wallet form
+ */
+function clearCreateWalletForm() {
+  document.getElementById('wallet-account-name').value = '';
+  document.getElementById('wallet-bts-password').value = '';
+  document.getElementById('wallet-bts-password-confirm').value = '';
+  document.getElementById('wallet-password').value = '';
+  document.getElementById('wallet-password-confirm').value = '';
+  document.getElementById('agree-terms').checked = false;
+  document.getElementById('wallet-account-name-status').textContent = '';
+  document.getElementById('wallet-bts-confirm-status').textContent = '';
+  const generateBtn = document.getElementById('btn-generate-wallet');
+  if (generateBtn) generateBtn.disabled = true;
+}
+
+/**
+ * Clear import wallet form
+ */
+function clearImportWalletForm() {
+  document.getElementById('import-account-name').value = '';
+  document.getElementById('import-account-password').value = '';
+  document.getElementById('import-brainkey-input').value = '';
+  document.getElementById('import-wallet-password').value = '';
+  document.getElementById('import-wallet-password-confirm').value = '';
+  document.getElementById('import-account-name-status').textContent = '';
+}
+
+/**
+ * Display brainkey words
+ */
+function displayBrainkey(brainkey) {
+  const container = document.getElementById('brainkey-display');
+  if (!container) return;
+
+  const words = brainkey.split(' ');
+  container.innerHTML = '';
+
+  words.forEach((word, index) => {
+    const wordEl = document.createElement('div');
+    wordEl.className = 'brainkey-word';
+    wordEl.innerHTML = `<span class="word-number">${index + 1}</span><span class="word-text">${escapeHtml(word)}</span>`;
+    container.appendChild(wordEl);
+  });
+}
+
+/**
+ * Handle copy brainkey
+ */
+async function handleCopyBrainkey() {
+  const words = Array.from(document.querySelectorAll('.brainkey-word .word-text'))
+    .map(el => el.textContent)
+    .join(' ');
+  
+  try {
+    await navigator.clipboard.writeText(words);
+    showToast('Brainkey copied to clipboard!', 'success');
+  } catch (error) {
+    showToast('Failed to copy brainkey', 'error');
+  }
+}
+
+/**
+ * Handle copy BTS password
+ */
+async function handleCopyBtsPassword() {
+  const password = document.getElementById('wallet-bts-password')?.value;
+  if (!password) return;
+  
+  try {
+    await navigator.clipboard.writeText(password);
+    showToast('BitShares password copied!', 'success');
+  } catch (error) {
+    showToast('Failed to copy password', 'error');
+  }
+}
+
+/**
+ * Handle verify brainkey
+ */
+function handleVerifyBrainkey() {
+  showScreen('dashboard-screen');
+}
+
+/**
+ * Handle generate wallet
+ */
+async function handleGenerateWallet() {
+  const accountName = document.getElementById('wallet-account-name')?.value?.trim();
+  const btsPassword = document.getElementById('wallet-bts-password')?.value;
+  const walletPassword = document.getElementById('wallet-password')?.value;
+  const network = document.getElementById('network-select')?.value || 'mainnet';
+
+  if (!accountName || !btsPassword || !walletPassword) {
+    showToast('Please fill in all required fields', 'error');
+    return;
+  }
+
+  const formatError = validateAccountNameFormat(accountName);
+  if (formatError) {
+    showToast(formatError, 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-generate-wallet');
+  const originalText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Creating wallet...';
+  }
+
+  try {
+    showToast('Creating wallet...', 'info');
+
+    const result = await walletManager.createWallet(
+      accountName,
+      walletPassword,
+      null, // brainkey will be auto-generated
+      accountName,
+      btsPassword,
+      network
+    );
+
+    if (result === true || result?.success) {
+      isLocked = false;
+      const brainkey = result?.brainkey || await walletManager.getBrainkey();
+      if (brainkey) displayBrainkey(brainkey);
+      showScreen('backup-brainkey-screen');
+      showToast('Wallet created successfully!', 'success');
+      clearCreateWalletForm();
+    } else {
+      throw new Error(result.error || 'Failed to create wallet');
+    }
+  } catch (error) {
+    console.error('Wallet creation error:', error);
+    showToast('Failed to create wallet: ' + error.message, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+/**
+ * Handle import wallet
+ */
+async function handleImportWallet() {
+  const activeTab = document.querySelector('.tab-btn.active')?.getAttribute('data-tab');
+  const walletPassword = document.getElementById('import-wallet-password')?.value;
+  const walletPasswordConfirm = document.getElementById('import-wallet-password-confirm')?.value;
+  const network = document.getElementById('network-select')?.value || 'mainnet';
+
+  if (!walletPassword || walletPassword.length < 8) {
+    showToast('Wallet password must be at least 8 characters', 'error');
+    return;
+  }
+
+  if (walletPassword !== walletPasswordConfirm) {
+    showToast('Passwords do not match', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-import-submit');
+  const originalText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+  }
+
+  try {
+    let importData = {};
+
+    if (activeTab === 'import-account') {
+      const accountName = document.getElementById('import-account-name')?.value?.trim();
+      const accountPassword = document.getElementById('import-account-password')?.value;
+
+      if (!accountName || !accountPassword) {
+        showToast('Please enter account name and password', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+        return;
+      }
+
+      importData = {
+        type: 'account',
+        accountName,
+        password: accountPassword,
+        network
+      };
+    } else if (activeTab === 'import-brainkey') {
+      const brainkey = document.getElementById('import-brainkey-input')?.value?.trim();
+
+      if (!brainkey) {
+        showToast('Please enter your brainkey', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+        return;
+      }
+
+      importData = {
+        type: 'brainkey',
+        brainkey,
+        network
+      };
+    } else {
+      throw new Error('Invalid import type');
+    }
+
+    showToast('Importing wallet...', 'info');
+
+    const result = await walletManager.importWallet(importData, walletPassword, network);
+
+    if (result === true || result?.success) {
+      isLocked = false;
+      showToast('Wallet imported successfully!', 'success');
+      clearImportWalletForm();
+      await loadDashboard();
+      showScreen('dashboard-screen');
+    } else {
+      throw new Error(result.error || 'Failed to import wallet');
+    }
+  } catch (error) {
+    console.error('Wallet import error:', error);
+    showToast('Failed to import wallet: ' + error.message, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+/**
+ * Handle unlock wallet
+ */
+async function handleUnlock() {
+  const password = document.getElementById('unlock-password')?.value;
+
+  if (!password) {
+    showToast('Please enter your password', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-unlock');
+  const originalText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Unlocking...';
+  }
+
+  try {
+    const unlocked = await walletManager.unlock(password);
+
+    if (unlocked) {
+      isLocked = false;
+      document.getElementById('unlock-password').value = '';
+      showToast('Wallet unlocked!', 'success');
+      await loadDashboard();
+      showScreen('dashboard-screen');
+    } else {
+      showToast('Incorrect password', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+  } catch (error) {
+    console.error('Unlock error:', error);
+    showToast('Failed to unlock: ' + error.message, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+/**
+ * Handle lock wallet
+ */
+async function handleLock() {
+  try {
+    await walletManager.lock();
+    isLocked = true;
+    showScreen('unlock-screen');
+    showToast('Wallet locked', 'info');
+  } catch (error) {
+    console.error('Lock error:', error);
+    showToast('Failed to lock wallet', 'error');
+  }
+}

@@ -6,6 +6,20 @@
 (function() {
   'use strict';
 
+  // Skip browser-internal pages where extension injection is unsupported or noisy.
+  const protocol = window.location.protocol;
+  const allowedProtocols = new Set(['http:', 'https:', 'file:']);
+  if (!allowedProtocols.has(protocol)) {
+    return;
+  }
+
+  function getPostMessageTargetOrigin() {
+    // file:// and opaque origins can surface as "null" and fail strict matching.
+    return window.location.origin && window.location.origin !== 'null'
+      ? window.location.origin
+      : '*';
+  }
+
   // Prevent multiple injections
   if (window.__BITSHARES_WALLET_INJECTED__) {
     return;
@@ -60,33 +74,33 @@
             type: 'BITSHARES_WALLET_EVENT',
             event: 'accountChanged',
             data: message.data
-          }, window.location.origin);
+          }, getPostMessageTargetOrigin());
         } else if (message.type === 'WALLET_LOCKED') {
           // Forward lock event to page
           window.postMessage({
             type: 'BITSHARES_WALLET_EVENT',
             event: 'locked'
-          }, window.location.origin);
+          }, getPostMessageTargetOrigin());
         } else if (message.type === 'WALLET_UNLOCKED') {
           // Forward unlock event to page, including network/chainId data
           window.postMessage({
             type: 'BITSHARES_WALLET_EVENT',
             event: 'unlocked',
             data: message.data
-          }, window.location.origin);
+          }, getPostMessageTargetOrigin());
         } else if (message.type === 'NETWORK_CHANGED') {
           // Forward network change event to page
           window.postMessage({
             type: 'BITSHARES_WALLET_EVENT',
             event: 'networkChanged',
             data: message.data
-          }, window.location.origin);
+          }, getPostMessageTargetOrigin());
         } else {
           // Forward other responses to page
           window.postMessage({
             type: 'BITSHARES_WALLET_RESPONSE',
             data: message
-          }, window.location.origin);
+          }, getPostMessageTargetOrigin());
         }
       });
 
@@ -159,13 +173,13 @@
         type: 'BITSHARES_WALLET_RESPONSE',
         id,
         data: response
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     } catch (error) {
       window.postMessage({
         type: 'BITSHARES_WALLET_RESPONSE',
         id,
         error: error.message
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     }
   });
 
@@ -197,25 +211,25 @@
       window.postMessage({
         type: 'BITSHARES_WALLET_EVENT',
         event: 'locked'
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     } else if (message.type === 'WALLET_UNLOCKED') {
       window.postMessage({
         type: 'BITSHARES_WALLET_EVENT',
         event: 'unlocked',
         data: message.data
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     } else if (message.type === 'ACCOUNT_CHANGED') {
       window.postMessage({
         type: 'BITSHARES_WALLET_EVENT',
         event: 'accountChanged',
         data: message.data
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     } else if (message.type === 'NETWORK_CHANGED') {
       window.postMessage({
         type: 'BITSHARES_WALLET_EVENT',
         event: 'networkChanged',
         data: message.data
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     }
     return true;
   });

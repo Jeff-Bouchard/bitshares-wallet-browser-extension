@@ -1,11 +1,17 @@
 /**
- * Privateness.network Wallet - Inpage Script
- * Provides the wallet API to web pages with Emercoin identity touch
+ * Bitshares-NESS custodial wallet - Inpage Script
+ * Provides the wallet API to web pages
  * This script runs in the page context
  */
 
 (function() {
   'use strict';
+
+  function getPostMessageTargetOrigin() {
+    return window.location.origin && window.location.origin !== 'null'
+      ? window.location.origin
+      : '*';
+  }
 
   // Prevent multiple definitions
   if (window.bitsharesWallet) {
@@ -38,7 +44,7 @@
         method,
         params,
         id
-      }, window.location.origin);
+      }, getPostMessageTargetOrigin());
     });
   }
 
@@ -100,19 +106,12 @@
     }
   }
 
-  // Define Privateness.network enhanced provider
+  // Define provider
   class BitSharesProvider {
     constructor() {
       this.isConnected = false;
       this.account = null;
       this.chainId = null;
-      // Privateness.network features with Emercoin touch
-      this.privateness = {
-        emercoinIdentity: {
-          store: this.storeEmercoinIdentity.bind(this),
-          retrieve: this.retrieveEmercoinIdentity.bind(this)
-        }
-      };
     }
 
     async connect(options = {}) {
@@ -154,15 +153,6 @@
 
     async transfer(params) {
       return await sendRequest('transfer', params);
-    }
-
-    // Privateness.network Emercoin Identity Methods
-    async storeEmercoinIdentity(identityData) {
-      return await sendRequest('storeEmercoinIdentity', { identityData });
-    }
-
-    async retrieveEmercoinIdentity(accountId) {
-      return await sendRequest('retrieveEmercoinIdentity', { accountId });
     }
 
     on(eventType, callback) {

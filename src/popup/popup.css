@@ -85,6 +85,10 @@ body {
   background: var(--bg-primary);
 }
 
+.wallet-container.compact {
+  overflow-y: hidden;
+}
+
 .wallet-container::before {
   content: '';
   position: absolute;
@@ -197,6 +201,14 @@ body {
 
 .bts-logo-large {
   margin-bottom: var(--spacing-md);
+}
+
+.balance-amount-sub {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: var(--spacing-xs);
 }
 
 .welcome-header h1 {
@@ -807,6 +819,69 @@ body {
   gap: var(--spacing-xs);
 }
 
+.tab-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.tab-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.tab-toggle-label {
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.global-tabs {
+  display: none;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg) 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, rgba(10, 14, 23, 0.98) 0%, rgba(10, 14, 23, 0.7) 70%, rgba(10, 14, 23, 0) 100%);
+}
+
+body.tab-mode .global-tabs {
+  display: flex;
+}
+
+.wallet-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.wallet-tab.active {
+  background: var(--primary);
+  color: var(--bg-primary);
+  border-color: transparent;
+}
+
+.wallet-tab:hover:not(.active) {
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
 .network-selector {
   display: flex;
   align-items: center;
@@ -989,6 +1064,28 @@ body {
   margin-bottom: var(--spacing-xs);
 }
 
+.balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  margin: var(--spacing-sm) 0;
+}
+
+.balance-tile {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  padding: 8px;
+}
+
+.balance-asset {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
 .balance-amount {
   display: block;
   font-size: 28px;
@@ -1013,6 +1110,27 @@ body {
   color: var(--text-muted);
   margin-top: var(--spacing-xs);
   font-family: var(--font-mono);
+}
+
+body.compact .screen {
+  padding: var(--spacing-md);
+}
+
+body.compact .dashboard-header {
+  margin-bottom: var(--spacing-sm);
+}
+
+body.compact .action-buttons {
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+body.compact .account-card {
+  padding: var(--spacing-md);
+}
+
+body.compact .assets-section {
+  margin-top: var(--spacing-md);
 }
 
 /* Action Buttons */

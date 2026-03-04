@@ -1,5 +1,5 @@
 /**
- * Privateness.network Wallet - Background Service Worker
+ * Bitshares-NESS custodial wallet - Background Service Worker
  * Handles blockchain connections, dApp communication, and wallet state
  */
 
@@ -47,7 +47,7 @@ class BackgroundService {
     // Try to connect to blockchain
     this.connectToBlockchain();
     
-    console.log('Privateness.network Wallet background service initialized');
+    console.log('Bitshares-NESS custodial wallet background service initialized');
   }
 
   async loadSettings() {
@@ -488,7 +488,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Connection request timed out. Please click the Privateness.network extension icon to approve.'));
+          reject(new Error('Connection request timed out. Please click the Bitshares-NESS custodial wallet extension icon to approve.'));
         }
       }, 60000);
     });
@@ -565,7 +565,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Transaction signing request timed out. Please click the Privateness.network extension icon to approve.'));
+          reject(new Error('Transaction signing request timed out. Please click the Bitshares-NESS custodial wallet extension icon to approve.'));
         }
       }, 60000);
     });
@@ -640,7 +640,7 @@ class BackgroundService {
           this.pendingRequests.delete(requestId);
           chrome.storage.local.remove(['pendingApproval']);
           chrome.action.setBadgeText({ text: '' });
-          reject(new Error('Transfer request timed out. Please click the Privateness.network extension icon to approve.'));
+          reject(new Error('Transfer request timed out. Please click the Bitshares-NESS custodial wallet extension icon to approve.'));
         }
       }, 60000);
     });
@@ -1219,7 +1219,7 @@ class BackgroundService {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: chrome.runtime.getURL('src/assets/icons/icon128.png'),
-      title: 'Privateness.network Wallet',
+      title: 'Bitshares-NESS custodial wallet',
       message: 'Your wallet has been automatically locked.'
     });
   }

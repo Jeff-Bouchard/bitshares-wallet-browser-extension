@@ -1,24 +1,18 @@
 /**
- * Skycoin Skywire Integration
- * Provides decentralized networking for private blockchain communication
+ * Deprecated legacy module.
+ * Alternative network routing integration is no longer supported in Bitshares-NESS custodial wallet.
  */
 
 export class SkywireNetwork {
   constructor() {
     this.isInitialized = false;
-    // Placeholder for Skywire initialization
   }
 
   async initialize() {
-    // Placeholder for initializing Skywire connection
-    console.log('Initializing Skywire decentralized network');
-    this.isInitialized = true;
-    return true;
+    throw new Error('Legacy routing integration has been removed');
   }
 
-  async routeTrafficThroughSkywire(nodeUrl) {
-    if (!this.isInitialized) await this.initialize();
-    console.log('Skywire routing not configured; using direct node URL for', nodeUrl);
-    return { success: false, routedUrl: null };
+  async routeTrafficThroughSkywire(_nodeUrl) {
+    throw new Error('Legacy routing integration has been removed');
   }
 }

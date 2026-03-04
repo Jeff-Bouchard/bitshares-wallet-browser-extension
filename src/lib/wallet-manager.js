@@ -1,5 +1,5 @@
 /**
- * Privateness.network Wallet Manager
+ * Bitshares-NESS custodial wallet manager
  * Handles wallet creation, encryption, storage, and key management
  */
 
@@ -332,7 +332,8 @@ export class WalletManager {
       // • brainkey-based (SLIP-48 HD) as fallback
       let keys;
       if (bitsharesAccountName && bitsharesPassword) {
-        keys = await CryptoUtils.generateKeysFromPassword(bitsharesAccountName, bitsharesPassword);
+        const keyPrefix = network === 'testnet' ? 'TEST' : 'BTS';
+        keys = await CryptoUtils.generateKeysFromPassword(bitsharesAccountName, bitsharesPassword, keyPrefix);
       } else {
         keys = await CryptoUtils.generateKeysFromBrainkey(brainkey);
       }
@@ -380,7 +381,7 @@ export class WalletManager {
         await this.findAndAddAccountByName(bitsharesAccountName, network);
       } else {
         try {
-          await this.findAndAddAccount(keys.active.publicKey, network);
+          await this.findAndAddAccountForKeys(keys, network);
         } catch (e) {
           if (!String(e?.message || e).includes('No accounts found for key')) {
             throw e;
@@ -388,7 +389,6 @@ export class WalletManager {
         }
       }
 
-      // Store identity on Emercoin NVS for decentralized verification
       return true;
     } catch (error) {
       throw new Error('Failed to create wallet: ' + error.message);
@@ -474,7 +474,7 @@ export class WalletManager {
       } else {
         // For other types, try to find by public key
         try {
-          await this.findAndAddAccount(keys.active.publicKey, network);
+          await this.findAndAddAccountForKeys(keys, network);
         } catch (e) {
           if (!String(e?.message || e).includes('No accounts found for key')) {
             throw e;
@@ -482,13 +482,10 @@ export class WalletManager {
         }
       }
 
-      // Store identity on Emercoin NVS for decentralized verification
       return true;
     } catch (error) {
       console.error('Import wallet error:', error);
       throw new Error('Failed to import wallet: ' + error.message);
-    } finally {
-      // Added finally block to ensure proper closure of the importWallet method
     }
   }
 
@@ -849,6 +846,32 @@ export class WalletManager {
       if (!acct) throw new Error('Account not found on BitShares');
       return await this.findAndAddAccountByName(acct.name, network);
     }
+    return false;
+  }
+
+  async findAndAddAccountForKeys(keys, network = 'mainnet') {
+    await this.ensureUnlocked();
+    await this.ensureApiConnected();
+
+    const candidates = [
+      keys?.active?.publicKey,
+      keys?.owner?.publicKey,
+      keys?.memo?.publicKey
+    ].filter(Boolean);
+
+    for (const pubKey of candidates) {
+      const accounts = await this.api.getAccountsByKey(pubKey);
+      if (accounts && accounts.length > 0) {
+        const first = accounts[0];
+        if (typeof first === 'string' && first.startsWith('1.2.')) {
+          const acct = await this.api.getAccount(first);
+          if (!acct) throw new Error('Account not found on BitShares');
+          return await this.findAndAddAccountByName(acct.name, network);
+        }
+        // If the node returns unexpected schema, keep trying.
+      }
+    }
+
     return false;
   }
 

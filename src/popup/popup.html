@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privateness.network BitShares Wallet</title>
+  <title>Bitshares-NESS custodial wallet</title>
   <link rel="stylesheet" href="popup.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -29,8 +29,16 @@
             <text x="50" y="58" text-anchor="middle" fill="url(#btsGradient)" font-size="24" font-weight="bold">BTS</text>
           </svg>
         </div>
-        <p class="loading-text">Initializing Privateness.network BitShares Wallet...</p>
+        <p class="loading-text">Initializing Bitshares-NESS custodial wallet...</p>
       </div>
+    </div>
+
+    <div class="dashboard-tabs global-tabs" id="global-tabs">
+      <button class="wallet-tab" data-screen="dashboard-screen">Wallet</button>
+      <button class="wallet-tab" data-screen="send-screen">Send</button>
+      <button class="wallet-tab" data-screen="receive-screen">Receive</button>
+      <button class="wallet-tab" data-screen="history-screen">History</button>
+      <button class="wallet-tab" data-screen="settings-screen">Settings</button>
     </div>
 
     <!-- Welcome/Setup Screen -->
@@ -48,8 +56,8 @@
           <polygon points="50,20 75,35 75,65 50,80 25,65 25,35" fill="url(#btsGradient2)" opacity="0.3"/>
           <text x="50" y="58" text-anchor="middle" fill="url(#btsGradient2)" font-size="24" font-weight="bold">BTS</text>
         </svg>
-        <h1>Privateness.network BitShares Wallet</h1>
-        <p class="subtitle">Your gateway to decentralized finance</p>
+        <h1>Bitshares-NESS custodial wallet</h1>
+        <p class="subtitle">Custodial BitShares wallet for BTS and XBTSX gateway assets</p>
       </div>
       <div class="welcome-network">
         <select id="welcome-network-select">
@@ -380,11 +388,15 @@
           </select>
         </div>
         <div class="header-actions">
+          <label class="tab-toggle" for="tab-mode-toggle" title="Toggle tabbed navigation">
+            <input type="checkbox" id="tab-mode-toggle">
+            <span class="tab-toggle-label">Tabs</span>
+          </label>
           <button id="btn-lock" class="btn-icon-only" title="Lock Wallet">🔒</button>
           <button id="btn-settings" class="btn-icon-only" title="Settings">⚙️</button>
         </div>
       </div>
-      
+
       <div class="account-card">
         <div class="account-info">
           <canvas class="account-avatar" id="account-avatar" width="80" height="80"></canvas>
@@ -399,8 +411,21 @@
         </div>
         
         <div class="balance-display">
-          <span class="balance-label">Total Balance</span>
-          <span class="balance-amount" id="balance-bts">0.00000 BTS</span>
+          <span class="balance-label">Bitshares-NESS custodial wallet balances</span>
+          <div class="balance-grid">
+            <div class="balance-tile">
+              <span class="balance-asset" id="balance-bts">0.00000 BTS</span>
+            </div>
+            <div class="balance-tile">
+              <span class="balance-asset" id="balance-ness">0 XBTSX.NESS</span>
+            </div>
+            <div class="balance-tile">
+              <span class="balance-asset" id="balance-nch">0 XBTSX.NCH</span>
+            </div>
+            <div class="balance-tile">
+              <span class="balance-asset" id="balance-emc">0 XBTSX.EMC</span>
+            </div>
+          </div>
           <span class="balance-usd" id="balance-usd">≈ $0.00 USD</span>
           <span class="bts-price" id="bts-price-display">Loading price...</span>
         </div>
@@ -453,7 +478,7 @@
         <div class="form-group">
           <label for="send-asset">Asset</label>
           <select id="send-asset">
-            <option value="1.3.0">BTS (BitShares)</option>
+            <option value="1.3.0">BTS (core asset)</option>
           </select>
         </div>
         <div class="form-group">
@@ -499,7 +524,7 @@
             <span class="btn-icon">📋</span> Copy to Clipboard
           </button>
         </div>
-        <p class="receive-hint">Share your account name to receive any BitShares asset</p>
+        <p class="receive-hint">Share your account name to receive NESS, BTS, and other BitShares assets</p>
       </div>
     </div>
 
@@ -549,7 +574,7 @@
             <h4 id="dapp-name"></h4>
             <p id="dapp-origin" class="dapp-origin"></p>
           </div>
-          <p class="connect-message" id="dapp-connect-message">This site wants to connect to your Privateness.network BitShares wallet</p>
+          <p class="connect-message" id="dapp-connect-message">This site wants to connect to your Bitshares-NESS custodial wallet</p>
           <p id="dapp-connect-network" class="connect-network-notice"></p>
           <div class="form-group" style="margin: var(--spacing-md) 0;">
             <label for="dapp-connect-account">Connect with account:</label>
@@ -844,7 +869,7 @@
       </div>
       <div class="dev-docs-container">
         <div class="docs-section">
-          <h4>Integrating with Privateness.network BitShares Wallet</h4>
+          <h4>Integrating with Bitshares-NESS custodial wallet</h4>
           <p class="docs-text">Your dApp can connect to this wallet using the injected <code>window.bitsharesWallet</code> API.</p>
         </div>
 

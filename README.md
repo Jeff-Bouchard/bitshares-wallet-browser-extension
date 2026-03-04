@@ -1,8 +1,8 @@
-# Privateness.network BitShares Wallet
+# Bitshares-NESS custodial wallet
 
-A secure browser extension for the BitShares blockchain, rebranded under Privateness.network with Emercoin's decentralized identity touch. Supports Chrome, Brave, and Firefox. Now integrated with Privateness.network technologies for enhanced privacy and security using Emercoin's NVS (Name-Value Storage) for decentralized identity and Skycoin's Skywire for private networking.
+A secure custodial browser extension for the BitShares blockchain. Supports Chrome, Brave, and Firefox, with BTS plus XBTSX gateway asset management, transaction signing, and dApp connectivity.
 
-![Privateness.network Wallet](./src/assets/icons/icon.svg)
+![Bitshares-NESS custodial wallet](./src/assets/icons/icon.svg)
 
 ## Features
 
@@ -18,7 +18,7 @@ A secure browser extension for the BitShares blockchain, rebranded under Private
 - Auto-lock functionality (configurable timer or disabled)
 - Backup brainkey for recovery
 - Multi-account support with watch-only accounts
-- Decentralized identity management with Emercoin NVS
+- Custodial account workflows optimized for browser extension UX
 
 ### Asset Management
 
@@ -35,7 +35,7 @@ A secure browser extension for the BitShares blockchain, rebranded under Private
 - Optional encrypted memos
 - Transaction fee calculation
 - Confirmation modal for all transactions
-- Private networking via Skycoin Skywire for enhanced transaction privacy
+- Reliable direct BitShares node connectivity with configurable node lists
 
 ### Full Operation Signing (All 75 BitShares Operations)
 
@@ -81,7 +81,7 @@ Unknown or future operations gracefully fall back to a formatted JSON display.
 - Manage site permissions
 - BeetEOS/Scatter API compatibility
 - Event-based communication
-- Access Privateness.network features like Emercoin identity and Skywire networking
+- Explicit permission-based dApp connectivity and transaction approval flows
 
 ### Network Support
 
@@ -246,12 +246,12 @@ bitshares-wallet-browser-extension/
 // Wait for wallet to be ready
 window.addEventListener('bitsharesWalletReady', (event) => {
   const provider = event.detail.provider;
-  console.log('BitShares Wallet detected!');
+  console.log('Bitshares-NESS custodial wallet detected!');
 });
 
 // Or check directly
 if (window.bitsharesWallet) {
-  console.log('BitShares Wallet is available');
+  console.log('Bitshares-NESS custodial wallet is available');
 }
 ```
 

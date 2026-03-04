@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
-  "name": "Privateness.network BitShares Wallet",
+  "name": "Bitshares-NESS custodial wallet",
   "version": "0.6.1",
-  "description": "A secure Privateness.network BitShares wallet extension - Sign transactions, manage keys, and interact with dApps",
-  "author": "Privateness.network / BitShares Community",
+  "description": "Bitshares-NESS custodial wallet for Firefox - manage BTS and XBTSX gateway assets, sign transactions, and interact with dApps",
+  "author": "BitShares Developers",
   "homepage_url": "https://bitshares.org",
 
   "browser_specific_settings": {
@@ -28,7 +28,7 @@
       "48": "src/assets/icons/icon48.png",
       "128": "src/assets/icons/icon128.png"
     },
-    "default_title": "Privateness.network BitShares Wallet"
+    "default_title": "Bitshares-NESS custodial wallet"
   },
 
   "background": {

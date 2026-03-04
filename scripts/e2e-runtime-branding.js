@@ -7,7 +7,7 @@
  * - Builds the Chrome extension to dist/
  * - Launches Chromium with the unpacked extension loaded
  * - Opens the extension popup page
- * - Asserts Privateness.network + BitShares branding is present at runtime
+ * - Asserts Bitshares-NESS custodial wallet branding is present at runtime
  */
 
 const fs = require('fs');
@@ -40,18 +40,100 @@ function runBuildChrome() {
   }
 }
 
-async function getExtensionIdFromServiceWorker(context) {
-  let sw = context.serviceWorkers()[0];
-  if (!sw) {
-    sw = await context.waitForEvent('serviceworker');
+function extractExtensionIdFromUrl(url) {
+  const parsed = new URL(url);
+  assert(parsed.protocol === 'chrome-extension:', `Unexpected extension URL protocol: ${url}`);
+  assert(parsed.host, `Could not extract extension ID from URL: ${url}`);
+  return parsed.host;
+}
+
+async function getExtensionIdFromServiceWorker(context, timeoutMs = 8000) {
+  const existing = context
+    .serviceWorkers()
+    .find((worker) => worker.url().startsWith('chrome-extension://'));
+
+  if (existing) {
+    return extractExtensionIdFromUrl(existing.url());
   }
 
-  const swUrl = sw.url();
-  const u = new URL(swUrl);
-  assert(u.protocol === 'chrome-extension:', `Unexpected service worker protocol: ${swUrl}`);
-  assert(u.host, `Could not extract extension ID from service worker URL: ${swUrl}`);
+  let sw = null;
+  try {
+    sw = await context.waitForEvent('serviceworker', {
+      timeout: timeoutMs,
+      predicate: (worker) => worker.url().startsWith('chrome-extension://')
+    });
+  } catch (_) {
+    return null;
+  }
 
-  return u.host;
+  if (!sw) return null;
+
+  return extractExtensionIdFromUrl(sw.url());
+}
+
+async function getExtensionIdFromExtensionsPage(context, expectedExtensionName) {
+  const page = await context.newPage();
+
+  try {
+    await page.goto('chrome://extensions/', { waitUntil: 'domcontentloaded' });
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const extensionId = await page.evaluate((expectedName) => {
+        const manager = document.querySelector('extensions-manager');
+        const managerRoot = manager && manager.shadowRoot;
+        if (!managerRoot) return null;
+
+        const itemList = managerRoot.querySelector('extensions-item-list');
+        const itemListRoot = itemList && itemList.shadowRoot;
+        if (!itemListRoot) return null;
+
+        const items = Array.from(itemListRoot.querySelectorAll('extensions-item'));
+        if (!items.length) return null;
+
+        for (const item of items) {
+          const itemRoot = item.shadowRoot;
+          const nameEl = itemRoot && itemRoot.querySelector('#name');
+          const name = nameEl ? String(nameEl.textContent || '').trim() : '';
+          if (name === expectedName) {
+            return item.getAttribute('id') || item.id || null;
+          }
+        }
+
+        const anyExtension = items.find((item) => {
+          const id = item.getAttribute('id') || item.id || '';
+          return /^[a-p]{32}$/.test(id);
+        });
+
+        return anyExtension ? anyExtension.getAttribute('id') || anyExtension.id : null;
+      }, expectedExtensionName);
+
+      if (extensionId) {
+        return extensionId;
+      }
+
+      await page.waitForTimeout(250);
+    }
+
+    return null;
+  } finally {
+    await page.close();
+  }
+}
+
+async function getExtensionId(context, expectedExtensionName) {
+  const fromServiceWorker = await getExtensionIdFromServiceWorker(context);
+  if (fromServiceWorker) {
+    return fromServiceWorker;
+  }
+
+  const fromExtensionsPage = await getExtensionIdFromExtensionsPage(context, expectedExtensionName);
+  if (fromExtensionsPage) {
+    return fromExtensionsPage;
+  }
+
+  throw new Error(
+    `Could not discover extension ID (service worker did not initialize in time and chrome://extensions fallback failed for extension "${expectedExtensionName}").`
+  );
 }
 
 function requirePlaywright() {
@@ -83,6 +165,13 @@ async function main() {
     throw new Error('dist/src/popup/popup.html not found after build.');
   }
 
+  const manifestPath = path.join(distDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error('dist/manifest.json not found after build.');
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const extensionName = String(manifest.name || '').trim() || 'Bitshares-NESS custodial wallet';
+
   const { chromium } = requirePlaywright();
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bts-wallet-ext-e2e-'));
@@ -98,7 +187,7 @@ async function main() {
   });
 
   try {
-    const extensionId = await getExtensionIdFromServiceWorker(context);
+    const extensionId = await getExtensionId(context, extensionName);
 
     const page = await context.newPage();
 
@@ -128,11 +217,12 @@ async function main() {
     const html = await page.content();
 
     const requiredSnippets = [
-      'Privateness.network BitShares Wallet',
-      'Initializing Privateness.network BitShares Wallet...',
+      'Bitshares-NESS custodial wallet',
+      'Initializing Bitshares-NESS custodial wallet...',
+      'Custodial BitShares wallet for BTS and XBTSX gateway assets',
       'BitShares Mainnet',
       'BitShares Testnet',
-      'Privateness.network BitShares wallet'
+      'This site wants to connect to your Bitshares-NESS custodial wallet'
     ];
 
     for (const snippet of requiredSnippets) {

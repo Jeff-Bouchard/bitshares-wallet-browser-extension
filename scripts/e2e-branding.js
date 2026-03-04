@@ -3,7 +3,7 @@
 /**
  * End-to-end branding validation for built extension artifacts.
  *
- * Verifies Privateness.network + BitShares branding across:
+ * Verifies Bitshares-NESS custodial wallet branding across:
  * - Chrome build output (dist)
  * - Firefox build output (dist-firefox)
  */
@@ -47,15 +47,15 @@ function validateManifest(manifestPath, toolbarTitleKey) {
   const manifest = readJson(manifestPath);
   const errors = [];
 
-  assertIncludes(manifest.name, ['Privateness.network', 'BitShares'], `${manifestPath} -> name`, errors);
-  assertIncludes(manifest.description, ['Privateness.network', 'BitShares'], `${manifestPath} -> description`, errors);
-  assertIncludes(manifest.author, ['Privateness.network', 'BitShares'], `${manifestPath} -> author`, errors);
+  assertIncludes(manifest.name, ['Bitshares-NESS', 'custodial wallet'], `${manifestPath} -> name`, errors);
+  assertIncludes(manifest.description, ['Bitshares-NESS', 'BTS', 'XBTSX'], `${manifestPath} -> description`, errors);
+  assertIncludes(manifest.author, ['BitShares'], `${manifestPath} -> author`, errors);
 
   const toolbarTitle = toolbarTitleKey
     .split('.')
     .reduce((acc, key) => (acc && Object.prototype.hasOwnProperty.call(acc, key) ? acc[key] : undefined), manifest);
 
-  assertIncludes(toolbarTitle, ['Privateness.network', 'BitShares'], `${manifestPath} -> ${toolbarTitleKey}`, errors);
+  assertIncludes(toolbarTitle, ['Bitshares-NESS', 'custodial wallet'], `${manifestPath} -> ${toolbarTitleKey}`, errors);
 
   return errors;
 }
@@ -65,11 +65,12 @@ function validatePopupHtml(popupPath) {
   const errors = [];
 
   const requiredSnippets = [
-    'Privateness.network BitShares Wallet',
-    'Initializing Privateness.network BitShares Wallet...',
+    'Bitshares-NESS custodial wallet',
+    'Initializing Bitshares-NESS custodial wallet...',
+    'Custodial BitShares wallet for BTS and XBTSX gateway assets',
     'BitShares Mainnet',
     'BitShares Testnet',
-    'Privateness.network BitShares wallet'
+    'This site wants to connect to your Bitshares-NESS custodial wallet'
   ];
 
   for (const snippet of requiredSnippets) {
