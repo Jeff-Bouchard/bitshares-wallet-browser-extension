@@ -5284,7 +5284,7 @@ async function initializeAPI() {
     // Notify background script of network change
     try {
       await chrome.runtime.sendMessage({
-        type: 'NETWORK_CHANGED',
+        type: 'NETWORK_SWITCH',
         data: { network }
       });
     } catch (e) {
@@ -5404,6 +5404,11 @@ async function loadDashboard() {
         
         // Update assets list
         await updateAssetsList(balances);
+
+        // Keep swap balances in sync when the swap screen is open.
+        if (currentScreen === 'swap-screen') {
+          await refreshSwapBalances();
+        }
       } catch (error) {
         console.error('Failed to load balances:', error);
         setCoreBalance('0.00000');
