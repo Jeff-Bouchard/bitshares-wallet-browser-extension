@@ -16,6 +16,10 @@ let btsAPI = null;
 let currentScreen = 'loading-screen';
 let isLocked = true;
 let isTabModeEnabled = false;
+const TAB_VIEW_PARAM = 'view';
+const TAB_VIEW_VALUE = 'tab';
+const isStandaloneTab =
+  new URLSearchParams(window.location.search).get(TAB_VIEW_PARAM) === TAB_VIEW_VALUE;
 
 // DOM Elements Cache
 const elements = {};
@@ -59,14 +63,39 @@ async function loadTabModePreference() {
   applyTabModeClass();
 }
 
+async function openWalletInBrowserTab() {
+  if (!chrome?.tabs?.create) {
+    throw new Error('Tab API is unavailable in this context');
+  }
+
+  const tabUrl = chrome.runtime.getURL(`src/popup/popup.html?${TAB_VIEW_PARAM}=${TAB_VIEW_VALUE}`);
+  await chrome.tabs.create({ url: tabUrl });
+}
+
 function applyTabModeClass() {
-  document.body.classList.toggle('tab-mode', isTabModeEnabled);
+  document.body.classList.toggle('tab-mode', isStandaloneTab);
+  document.body.classList.toggle('app-tab', isStandaloneTab);
   applyCompactLayout();
 }
 
 async function handleTabModeToggle(e) {
   isTabModeEnabled = Boolean(e.target.checked);
   await chrome.storage.local.set({ tabModeEnabled: isTabModeEnabled });
+
+  if (isTabModeEnabled && !isStandaloneTab) {
+    try {
+      await openWalletInBrowserTab();
+      window.close();
+      return;
+    } catch (error) {
+      console.error('Open-in-tab failed:', error);
+      isTabModeEnabled = false;
+      await chrome.storage.local.set({ tabModeEnabled: false });
+      if (elements.tabModeToggle) elements.tabModeToggle.checked = false;
+      showToast('Unable to open wallet in a browser tab', 'error');
+    }
+  }
+
   applyTabModeClass();
 }
 
@@ -283,6 +312,15 @@ function setupEventListeners() {
 async function initializeApp() {
   try {
     await loadTabModePreference();
+
+    // If user prefers tab view, open the full wallet in a browser tab
+    // and close this popup instance.
+    if (isTabModeEnabled && !isStandaloneTab) {
+      await openWalletInBrowserTab();
+      window.close();
+      return;
+    }
+
     // Initialize wallet manager
     walletManager = new WalletManager();
 
@@ -343,11 +381,11 @@ async function updateAssetsList(balances) {
   if (!assetsList) return;
   assetsList.innerHTML = '';
 
-  const pinnedSymbols = new Set(['XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC']);
+  const topSectionSymbols = new Set(['BTS', 'TEST', 'XBTSX.NESS', 'XBTSX.NCH', 'XBTSX.EMC']);
 
-  const nonZeroBalances = balances.filter((balance) => parseInt(balance.amount) !== 0);
+  const listedBalances = balances.filter((balance) => balance && balance.asset_id);
   const balanceAssets = await Promise.all(
-    nonZeroBalances.map(async (balance) => {
+    listedBalances.map(async (balance) => {
       try {
         const asset = await btsAPI.getAsset(balance.asset_id);
         return { balance, asset };
@@ -362,7 +400,7 @@ async function updateAssetsList(balances) {
 
     const { balance, asset } = entry;
     const symbol = String(asset.symbol || '').toUpperCase();
-    if (pinnedSymbols.has(symbol)) continue;
+    if (balance.asset_id === '1.3.0' || topSectionSymbols.has(symbol)) continue;
 
     const precision = Math.pow(10, asset.precision);
     const amount = (parseInt(balance.amount) / precision).toFixed(asset.precision);
@@ -390,7 +428,7 @@ async function updateAssetsList(balances) {
   }
   
   if (assetsList.children.length === 0) {
-    assetsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No assets yet</p></div>';
+    assetsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No additional assets</p></div>';
   }
 }
 
